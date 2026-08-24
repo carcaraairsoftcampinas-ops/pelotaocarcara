@@ -1,0 +1,108 @@
+import React from "react";
+import { Route, Routes } from "react-router-dom";
+import { Layout } from "./components/Layout";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { useAuth } from "./lib/AuthContext";
+
+import Login from "./pages/Login";
+import Home from "./pages/Home";
+import Colaboradores from "./pages/cadastros/Colaboradores";
+import Campos from "./pages/cadastros/Campos";
+import NovaMissao from "./pages/missoes/NovaMissao";
+import ConsultaMissoes from "./pages/missoes/ConsultaMissoes";
+import CamposDisponiveis from "./pages/missoes/CamposDisponiveis";
+import AnaliseMissoes from "./pages/analise/AnaliseMissoes";
+import AvaliacaoMissoes from "./pages/analise/AvaliacaoMissoes";
+import LancamentoFinanceiro from "./pages/financeiro/LancamentoFinanceiro";
+import CaixaGeral from "./pages/financeiro/CaixaGeral";
+import AprovacaoFinanceira from "./pages/aprovacao/AprovacaoFinanceira";
+
+function Protected({
+  perfis,
+  children,
+}: {
+  perfis?: import("../shared/types").Perfil[];
+  children: React.ReactNode;
+}) {
+  return (
+    <ProtectedRoute perfis={perfis}>
+      <Layout>{children}</Layout>
+    </ProtectedRoute>
+  );
+}
+
+export default function App() {
+  const { loading } = useAuth();
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="spinner" />
+      </div>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+
+      <Route path="/" element={<Protected>{<Home />}</Protected>} />
+
+      <Route
+        path="/cadastros/colaboradores"
+        element={<Protected perfis={["Administrador"]}>{<Colaboradores />}</Protected>}
+      />
+      <Route path="/cadastros/campos" element={<Protected perfis={["Administrador"]}>{<Campos />}</Protected>} />
+
+      <Route
+        path="/missoes/nova"
+        element={
+          <Protected perfis={["Administrador", "Coordenador", "Colaborador"]}>{<NovaMissao />}</Protected>
+        }
+      />
+      <Route
+        path="/missoes/nova/:id"
+        element={
+          <Protected perfis={["Administrador", "Coordenador", "Colaborador"]}>{<NovaMissao />}</Protected>
+        }
+      />
+      <Route
+        path="/missoes/consulta"
+        element={
+          <Protected perfis={["Administrador", "Coordenador", "Colaborador"]}>{<ConsultaMissoes />}</Protected>
+        }
+      />
+      <Route
+        path="/missoes/campos-disponiveis"
+        element={
+          <Protected perfis={["Administrador", "Coordenador", "Colaborador"]}>{<CamposDisponiveis />}</Protected>
+        }
+      />
+
+      <Route
+        path="/analise/missoes"
+        element={<Protected perfis={["Administrador", "Coordenador"]}>{<AnaliseMissoes />}</Protected>}
+      />
+      <Route
+        path="/analise/avaliacao"
+        element={<Protected perfis={["Administrador", "Coordenador"]}>{<AvaliacaoMissoes />}</Protected>}
+      />
+
+      <Route
+        path="/financeiro/lancamento"
+        element={
+          <Protected perfis={["Administrador", "Financeiro", "Coordenador"]}>{<LancamentoFinanceiro />}</Protected>
+        }
+      />
+      <Route
+        path="/financeiro/caixa"
+        element={<Protected perfis={["Administrador", "Financeiro", "Coordenador"]}>{<CaixaGeral />}</Protected>}
+      />
+      <Route
+        path="/financeiro/aprovacao"
+        element={<Protected perfis={["Administrador"]}>{<AprovacaoFinanceira />}</Protected>}
+      />
+
+      <Route path="*" element={<Protected>{<Home />}</Protected>} />
+    </Routes>
+  );
+}
