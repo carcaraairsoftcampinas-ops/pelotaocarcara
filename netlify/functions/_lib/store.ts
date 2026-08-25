@@ -7,6 +7,7 @@ import { getStore } from "@netlify/blobs";
 export const STORES = {
   colaboradores: "colaboradores",
   campos: "campos",
+  operadores: "operadores",
   missoes: "missoes",
   financeiro: "financeiro",
   counters: "counters",
@@ -52,22 +53,36 @@ export async function remove(name: StoreName, id: string): Promise<void> {
   await s.delete(id);
 }
 
-// Numeração sequencial anual (ex: 001-2026), atribuída só ao enviar p/ análise.
+// Numeração sequencial anual (ex: 001-2026), atribuída só quando a ação final
+// realmente acontece (ex: ao enviar p/ análise, ou ao criar um operador).
 // Netlify Blobs não expõe um contador atômico nativo, então usamos leitura +
 // escrita + reverificação com poucas tentativas — suficiente para o volume de
 // uso de um time (baixíssima chance de duas pessoas enviarem no mesmo instante).
-export async function nextMissionNumber(year: number): Promise<string> {
+//
+// IMPORTANTE: só chame isso depois que o restante da validação/gravação tiver
+// grande chance de dar certo — cada chamada bem-sucedida "gasta" um número,
+// mesmo que a gravação seguinte falhe por algum outro motivo (ex.: payload
+// grande demais). Ver `_lib/http.ts`/telas que fazem upload de anexos antes.
+async function nextSequencia(prefixo: string, year: number, digitos: number): Promise<string> {
   const s = store(STORES.counters);
-  const key = `missoes-${year}`;
+  const key = `${prefixo}-${year}`;
   for (let attempt = 0; attempt < 6; attempt++) {
     const current = ((await s.get(key, { type: "json" })) as number | null) ?? 0;
     const next = current + 1;
     await s.setJSON(key, next);
     const verify = (await s.get(key, { type: "json" })) as number | null;
     if (verify === next) {
-      return `${String(next).padStart(3, "0")}-${year}`;
+      return `${String(next).padStart(digitos, "0")}-${year}`;
     }
     await new Promise((r) => setTimeout(r, 40 + Math.random() * 120));
   }
-  throw new Error("Não foi possível gerar o número da missão. Tente novamente.");
+  throw new Error("Não foi possível gerar o número sequencial. Tente novamente.");
+}
+
+export async function nextMissionNumber(year: number): Promise<string> {
+  return nextSequencia("missoes", year, 3);
+}
+
+export async function nextOperadorId(year: number): Promise<string> {
+  return nextSequencia("operadores", year, 4);
 }
