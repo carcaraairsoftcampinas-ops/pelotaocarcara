@@ -194,7 +194,7 @@ export default function MovimentacaoFinanceira() {
     const investLimpos = investimentos.filter((i) => i.nome.trim());
     const creditLimpos = creditos.filter((c) => c.valor > 0);
     if (action === "aprovacao") {
-      if (investLimpos.length === 0) return setFormError("Informe ao menos um item de investimento.");
+      if (investLimpos.length === 0) return setFormError("Informe ao menos um item de despesa.");
       if (creditLimpos.length === 0) return setFormError("Informe ao menos uma linha de créditos.");
     }
 
@@ -302,6 +302,8 @@ export default function MovimentacaoFinanceira() {
                     <th>Nome</th>
                     <th>Data</th>
                     <th>Colaborador</th>
+                    <th>Qtde Operadores</th>
+                    <th>Operadores Presentes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -314,6 +316,8 @@ export default function MovimentacaoFinanceira() {
                       <td>{r.nome}</td>
                       <td>{formatDate(r.data)}</td>
                       <td>{r.colaboradorNome}</td>
+                      <td>{r.quantidadeOperadores ?? "—"}</td>
+                      <td>{r.operadoresPresentes ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -369,7 +373,7 @@ export default function MovimentacaoFinanceira() {
               <textarea value={observacoesDados} onChange={(e) => setObservacoesDados(e.target.value)} rows={2} />
             </Field>
 
-            <h3 style={{ marginTop: 20 }}>Investimentos</h3>
+            <h3 style={{ marginTop: 20 }}>Despesas</h3>
             {investimentos.map((i) => (
               <div className="item-row" key={i.id}>
                 <Field label="Nome do item">
@@ -404,7 +408,7 @@ export default function MovimentacaoFinanceira() {
               + Adicionar item
             </button>
             <div className="summary-box">
-              <span>Total investimentos</span>
+              <span>Total despesas</span>
               <span className="value">{formatBRL(totalInvest)}</span>
             </div>
             <Field label="Observações">
@@ -444,7 +448,7 @@ export default function MovimentacaoFinanceira() {
 
             <h3 style={{ marginTop: 20 }}>Fechamento</h3>
             <div className="summary-box" style={{ borderColor: "var(--gold-dim)" }}>
-              <span>Saldo (créditos − investimentos)</span>
+              <span>Saldo (créditos − despesas)</span>
               <span className="value">{formatBRL(saldo)}</span>
             </div>
 

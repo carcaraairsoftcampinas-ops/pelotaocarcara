@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
 import { MENU } from "../lib/menu";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, has, logout } = useAuth();
@@ -82,7 +83,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </aside>
-      <main className="main">{children}</main>
+      <main className="main">
+        <ErrorBoundary key={location.pathname}>{children}</ErrorBoundary>
+      </main>
     </div>
   );
 }

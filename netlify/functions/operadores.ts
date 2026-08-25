@@ -62,7 +62,7 @@ export default async (req: Request): Promise<Response> => {
     const id = url.searchParams.get("id");
 
     if (req.method === "GET") {
-      requirePerfil(user, ["Administrador", "Coordenador"]);
+      requirePerfil(user, ["Administrador", "Coordenador", "Colaborador"]);
       if (id) {
         const o = await getById<Operador>(STORES.operadores, id);
         if (!o) throw new HttpError(404, "Operador não encontrado.");

@@ -37,7 +37,7 @@ function validarDados(input: LancamentoInput) {
 
 function validarAprovacao(investimentos: ItemInvestimento[], creditos: ItemCredito[]) {
   if (investimentos.length === 0) {
-    throw new HttpError(400, "Informe ao menos um item de investimento antes de enviar para aprovação.");
+    throw new HttpError(400, "Informe ao menos um item de despesa antes de enviar para aprovação.");
   }
   if (creditos.length === 0) {
     throw new HttpError(400, "Informe ao menos uma linha de créditos antes de enviar para aprovação.");
@@ -66,6 +66,68 @@ function limparCreditos(itens: ItemCredito[] | undefined): ItemCredito[] {
     }));
 }
 
+const STATUS_ANTIGO_PARA_NOVO: Record<string, LancamentoFinanceiro["status"]> = {
+  Rascunho: "Em Andamento",
+  "Enviado Análise Financeira": "Aprovação Pendente",
+  Aprovado: "Financeiro Aprovado",
+  Reprovado: "Financeiro Pendente",
+};
+
+// Registros criados antes da reorganização do Financeiro (Rodada 3) tinham
+// outro formato (`gastos`, `creditos: {pix,especie,outros}`, status antigos).
+// Sem essa normalização na leitura, o front quebra (ex: `.reduce` num objeto
+// que não é mais array) e a tela inteira cai — foi a causa do "site fica
+// tudo preto" ao abrir Aprovação Financeira. Normaliza tudo pro formato
+// atual assim que sai do banco, sem precisar migrar os dados manualmente.
+function normalizarLancamento(raw: any): LancamentoFinanceiro {
+  const investimentos: ItemInvestimento[] = Array.isArray(raw.investimentos)
+    ? raw.investimentos
+    : Array.isArray(raw.gastos)
+    ? raw.gastos.map((g: any) => ({
+        id: g.id || uuidv4(),
+        nome: g.nome || "",
+        quantidade: Number(g.quantidade) || 0,
+        valorUnitario: Number(g.valorUnitario) || 0,
+      }))
+    : [];
+
+  let creditos: ItemCredito[];
+  if (Array.isArray(raw.creditos)) {
+    creditos = raw.creditos;
+  } else if (raw.creditos && typeof raw.creditos === "object") {
+    const c = raw.creditos;
+    const dataBase = (raw.createdAt || "").slice(0, 10);
+    creditos = [];
+    if (Number(c.pix) > 0) creditos.push({ id: uuidv4(), data: dataBase, descricao: "PIX (migrado)", valor: Number(c.pix) });
+    if (Number(c.especie) > 0) creditos.push({ id: uuidv4(), data: dataBase, descricao: "Espécie (migrado)", valor: Number(c.especie) });
+    if (Number(c.outros) > 0) creditos.push({ id: uuidv4(), data: dataBase, descricao: "Outros (migrado)", valor: Number(c.outros) });
+  } else {
+    creditos = [];
+  }
+
+  const status: LancamentoFinanceiro["status"] = STATUS_ANTIGO_PARA_NOVO[raw.status] || raw.status;
+
+  return {
+    id: raw.id,
+    tipo: raw.tipo,
+    missaoId: raw.missaoId ?? null,
+    nomeProjeto: raw.nomeProjeto ?? null,
+    dataInicio: raw.dataInicio ?? null,
+    dataFinal: raw.dataFinal ?? null,
+    observacoesDados: raw.observacoesDados || "",
+    investimentos,
+    observacoesInvestimentos: raw.observacoesInvestimentos || "",
+    creditos,
+    status,
+    observacaoAprovacao: raw.observacaoAprovacao || "",
+    criadoPorId: raw.criadoPorId,
+    criadoPorNome: raw.criadoPorNome,
+    historicoStatus: raw.historicoStatus || [],
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
+}
+
 export default async (req: Request): Promise<Response> => {
   return handleErrors(async () => {
     const user = requireUser(req);
@@ -77,9 +139,9 @@ export default async (req: Request): Promise<Response> => {
       if (id) {
         const l = await getById<LancamentoFinanceiro>(STORES.financeiro, id);
         if (!l) throw new HttpError(404, "Lançamento não encontrado.");
-        return json(200, l);
+        return json(200, normalizarLancamento(l));
       }
-      let all = await listAll<LancamentoFinanceiro>(STORES.financeiro);
+      let all = (await listAll<LancamentoFinanceiro>(STORES.financeiro)).map(normalizarLancamento);
 
       const tipo = url.searchParams.get("tipo");
       const status = url.searchParams.get("status");

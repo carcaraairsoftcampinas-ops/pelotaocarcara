@@ -61,6 +61,15 @@ export async function remove(name: StoreName, id: string): Promise<void> {
   await s.delete(id);
 }
 
+// Apaga TODAS as chaves de um store — usado só pela função de reset do
+// Administrador (`admin-reset.ts`). Sem volta.
+export async function wipeStore(name: StoreName): Promise<number> {
+  const s = store(name);
+  const { blobs } = await s.list();
+  await Promise.all(blobs.map((b) => s.delete(b.key)));
+  return blobs.length;
+}
+
 // Numeração sequencial anual (ex: 001-2026), atribuída só quando a ação final
 // realmente acontece (ex: ao enviar p/ análise, ou ao criar um operador).
 // Netlify Blobs não expõe um contador atômico nativo, então usamos leitura +

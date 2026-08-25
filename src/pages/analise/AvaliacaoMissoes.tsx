@@ -110,6 +110,7 @@ export default function AvaliacaoMissoes() {
                   <th>Data</th>
                   <th>Data de criação</th>
                   <th>Campo</th>
+                  <th>Qtde Operadores</th>
                   <th>Avaliação</th>
                 </tr>
               </thead>
@@ -124,6 +125,7 @@ export default function AvaliacaoMissoes() {
                     <td>{formatDate(m.data)}</td>
                     <td>{m.dataEnvioAnalise ? formatDate(m.dataEnvioAnalise) : "—"}</td>
                     <td>{campoNome(m.campoId)}</td>
+                    <td>{m.quantidadeOperadores ?? "—"}</td>
                     <td>{m.avaliacao ? "★".repeat(m.avaliacao.estrelas) : "Pendente"}</td>
                   </tr>
                 ))}

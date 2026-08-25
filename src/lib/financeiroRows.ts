@@ -17,6 +17,8 @@ export interface MovimentacaoRow {
   missaoId: string | null;
   lancamentoId: string | null; // null = missão ainda sem lançamento iniciado
   investimentoPrevisto: number; // só usado quando lancamentoId é null (soma dos itensCompra da missão)
+  quantidadeOperadores: number | null; // planejado, preenchido em Nova Missão — só pra origem "missao"
+  operadoresPresentes: number | null; // real, preenchido em Avaliação de Missões — só pra origem "missao"
 }
 
 export function buildMovimentacaoRows(missoes: Missao[], lancamentos: LancamentoFinanceiro[]): MovimentacaoRow[] {
@@ -25,15 +27,20 @@ export function buildMovimentacaoRows(missoes: Missao[], lancamentos: Lancamento
   const relevantes = missoes.filter((m) => m.status === "Aprovada" || m.status === "Finalizada");
   for (const m of relevantes) {
     const lanc = lancamentos.find((l) => l.tipo === "missao" && l.missaoId === m.id);
+    const base = {
+      nome: m.nome,
+      data: m.data,
+      colaboradorNome: m.criadoPorNome,
+      missaoId: m.id,
+      quantidadeOperadores: m.quantidadeOperadores ?? null,
+      operadoresPresentes: m.avaliacao?.totalOperadoresPresentes ?? null,
+    };
     if (lanc) {
       rows.push({
         key: `missao-${m.id}`,
         origem: "missao",
-        nome: m.nome,
-        data: m.data,
+        ...base,
         status: lanc.status,
-        colaboradorNome: m.criadoPorNome,
-        missaoId: m.id,
         lancamentoId: lanc.id,
         investimentoPrevisto: 0,
       });
@@ -41,11 +48,8 @@ export function buildMovimentacaoRows(missoes: Missao[], lancamentos: Lancamento
       rows.push({
         key: `missao-${m.id}`,
         origem: "missao",
-        nome: m.nome,
-        data: m.data,
+        ...base,
         status: m.status === "Aprovada" ? "Em Andamento" : "Financeiro Pendente",
-        colaboradorNome: m.criadoPorNome,
-        missaoId: m.id,
         lancamentoId: null,
         investimentoPrevisto: m.investimentoTotal || 0,
       });
@@ -64,6 +68,8 @@ export function buildMovimentacaoRows(missoes: Missao[], lancamentos: Lancamento
       missaoId: null,
       lancamentoId: l.id,
       investimentoPrevisto: 0,
+      quantidadeOperadores: null,
+      operadoresPresentes: null,
     });
   }
 

@@ -77,6 +77,12 @@ export default function AprovacaoFinanceira() {
     return l.nomeProjeto || "Projeto";
   }
 
+  function qtdeOperadores(l: LancamentoFinanceiro): number | null {
+    if (l.tipo !== "missao") return null;
+    const m = missoes.find((x) => x.id === l.missaoId);
+    return m?.quantidadeOperadores ?? null;
+  }
+
   const podeAgir = selecionado?.status === "Aprovação Pendente";
 
   return (
@@ -100,6 +106,7 @@ export default function AprovacaoFinanceira() {
                   <th>Data</th>
                   <th>Resultado</th>
                   <th>Criado por</th>
+                  <th>Qtde Operadores</th>
                 </tr>
               </thead>
               <tbody>
@@ -113,6 +120,7 @@ export default function AprovacaoFinanceira() {
                     <td>{formatDate(l.createdAt)}</td>
                     <td>{formatBRL(resultadoLancamento(l))}</td>
                     <td>{l.criadoPorNome}</td>
+                    <td>{qtdeOperadores(l) ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -134,7 +142,7 @@ export default function AprovacaoFinanceira() {
               <span className="value">{formatBRL(totalCreditosItens(selecionado.creditos))}</span>
             </div>
             <div className="summary-box">
-              <span>Investimentos</span>
+              <span>Despesas</span>
               <span className="value">{formatBRL(totalInvestimentos(selecionado.investimentos))}</span>
             </div>
             <div className="summary-box">
@@ -143,7 +151,7 @@ export default function AprovacaoFinanceira() {
             </div>
           </div>
 
-          <h3 style={{ marginTop: 16 }}>Investimentos</h3>
+          <h3 style={{ marginTop: 16 }}>Despesas</h3>
           <div className="table-wrap">
             <table>
               <thead>

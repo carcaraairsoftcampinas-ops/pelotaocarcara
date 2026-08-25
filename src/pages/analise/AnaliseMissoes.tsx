@@ -162,6 +162,7 @@ export default function AnaliseMissoes() {
                   <th>Data de criação</th>
                   <th>Campo</th>
                   <th>Colaborador</th>
+                  <th>Qtde Operadores</th>
                 </tr>
               </thead>
               <tbody>
@@ -176,6 +177,7 @@ export default function AnaliseMissoes() {
                     <td>{m.dataEnvioAnalise ? formatDate(m.dataEnvioAnalise) : "—"}</td>
                     <td>{campoNome(m.campoId)}</td>
                     <td>{m.criadoPorNome}</td>
+                    <td>{m.quantidadeOperadores ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

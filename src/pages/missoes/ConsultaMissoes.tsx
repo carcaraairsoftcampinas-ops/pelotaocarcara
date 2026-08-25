@@ -144,6 +144,7 @@ export default function ConsultaMissoes() {
                   <th>Data de criação</th>
                   <th>Campo</th>
                   <th>Colaborador</th>
+                  <th>Qtde Operadores</th>
                   {!somenteColaborador && <th>Avaliação</th>}
                 </tr>
               </thead>
@@ -159,6 +160,7 @@ export default function ConsultaMissoes() {
                     <td>{m.dataEnvioAnalise ? formatDate(m.dataEnvioAnalise) : "—"}</td>
                     <td>{campoNome(m.campoId)}</td>
                     <td>{m.criadoPorNome}</td>
+                    <td>{m.quantidadeOperadores ?? "—"}</td>
                     {!somenteColaborador && <td>{m.avaliacao ? "★".repeat(m.avaliacao.estrelas) : "—"}</td>}
                   </tr>
                 ))}
