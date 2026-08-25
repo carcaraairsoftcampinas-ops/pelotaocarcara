@@ -202,6 +202,25 @@ export const STATUS_FINANCEIRO_PROVISAO: StatusFinanceiro[] = [
   "Financeiro Pendente",
 ];
 
+// Log de auditoria — registrado automaticamente pelo backend a cada
+// criação/edição/mudança de status de Missões e Lançamentos Financeiros
+// (missão ou projeto). Todos os perfis podem visualizar; só Administrador
+// pode editar o campo `detalhes` de um registro já existente (ex: corrigir
+// um texto), pela tela de Logs.
+export type LogEntidadeTipo = "missao" | "financeiro";
+
+export interface LogEntry {
+  id: string;
+  entidadeTipo: LogEntidadeTipo;
+  entidadeId: string;
+  entidadeNome: string; // nome/número pra exibir sem precisar buscar de novo
+  acao: string; // descrição curta, ex: "Missão criada", "Status alterado para Aprovada"
+  detalhes: string; // texto livre com mais contexto (campos alterados, observação etc.)
+  colaboradorId: string;
+  colaboradorNome: string;
+  data: string;
+}
+
 export const PERFIS: Perfil[] = ["Administrador", "Colaborador", "Financeiro", "Coordenador"];
 
 export const STATUS_MISSAO_ORDEM: StatusMissao[] = [

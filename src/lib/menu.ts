@@ -58,4 +58,9 @@ export const MENU: MenuGroup[] = [
       { label: "Relatório de Presenças", path: "/operadores/presencas" },
     ],
   },
+  {
+    label: "Auditoria",
+    perfis: ["Administrador", "Coordenador", "Colaborador", "Financeiro"],
+    items: [{ label: "Logs", path: "/logs" }],
+  },
 ];

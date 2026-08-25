@@ -2,7 +2,34 @@ import { v4 as uuidv4 } from "uuid";
 import { json, readJson, handleErrors, HttpError } from "./_lib/http";
 import { requireUser, requirePerfil } from "./_lib/session";
 import { listAll, getById, upsert, remove, STORES } from "./_lib/store";
+import { registrarLog } from "./_lib/log";
 import type { LancamentoFinanceiro, ItemInvestimento, ItemCredito, Missao } from "../../shared/types";
+
+// Rótulos legíveis dos campos comparados entre a versão antiga e a nova de
+// um lançamento editado — usado só pra montar o texto do log de auditoria.
+const CAMPOS_LANCAMENTO: [string, keyof LancamentoFinanceiro][] = [
+  ["Nome do projeto", "nomeProjeto"],
+  ["Data início", "dataInicio"],
+  ["Data final", "dataFinal"],
+  ["Observações (Dados)", "observacoesDados"],
+  ["Despesas", "investimentos"],
+  ["Observações (Despesas)", "observacoesInvestimentos"],
+  ["Créditos", "creditos"],
+];
+
+function camposLancamentoAlterados(antigo: LancamentoFinanceiro, novo: LancamentoFinanceiro): string[] {
+  return CAMPOS_LANCAMENTO.filter(([, key]) => JSON.stringify(antigo[key]) !== JSON.stringify(novo[key])).map(
+    ([label]) => label
+  );
+}
+
+async function nomeLog(l: LancamentoFinanceiro): Promise<string> {
+  if (l.tipo === "missao" && l.missaoId) {
+    const m = await getById<Missao>(STORES.missoes, l.missaoId);
+    if (m) return `${m.nome}${m.numero ? ` (${m.numero})` : ""}`;
+  }
+  return l.nomeProjeto || "Projeto";
+}
 
 // Movimentação Financeira — acesso de quem pode criar/editar lançamentos.
 const ACESSO: ("Administrador" | "Financeiro" | "Coordenador")[] = ["Administrador", "Financeiro", "Coordenador"];
@@ -209,6 +236,17 @@ export default async (req: Request): Promise<Response> => {
       }
 
       await upsert(STORES.financeiro, record);
+      await registrarLog({
+        entidadeTipo: "financeiro",
+        entidadeId: record.id,
+        entidadeNome: await nomeLog(record),
+        acao:
+          record.status === "Aprovação Pendente"
+            ? "Lançamento criado e enviado para Aprovação Financeira"
+            : "Lançamento criado (Em Andamento)",
+        colaboradorId: user.colaboradorId,
+        colaboradorNome: user.nome,
+      });
       return json(201, record);
     }
 
@@ -258,6 +296,19 @@ export default async (req: Request): Promise<Response> => {
       }
 
       await upsert(STORES.financeiro, updated);
+      const alterados = camposLancamentoAlterados(existing, updated);
+      await registrarLog({
+        entidadeTipo: "financeiro",
+        entidadeId: updated.id,
+        entidadeNome: await nomeLog(updated),
+        acao:
+          input.action === "aprovacao"
+            ? "Lançamento editado e enviado para Aprovação Financeira"
+            : "Lançamento editado",
+        detalhes: alterados.length > 0 ? `Campos alterados: ${alterados.join(", ")}.` : "Nenhum campo alterado.",
+        colaboradorId: user.colaboradorId,
+        colaboradorNome: user.nome,
+      });
       return json(200, updated);
     }
 
@@ -269,6 +320,14 @@ export default async (req: Request): Promise<Response> => {
         throw new HttpError(400, "Só é possível excluir lançamentos em Em Andamento.");
       }
       await remove(STORES.financeiro, id);
+      await registrarLog({
+        entidadeTipo: "financeiro",
+        entidadeId: existing.id,
+        entidadeNome: await nomeLog(existing),
+        acao: "Lançamento excluído",
+        colaboradorId: user.colaboradorId,
+        colaboradorNome: user.nome,
+      });
       return json(200, { ok: true });
     }
 

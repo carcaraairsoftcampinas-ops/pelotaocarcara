@@ -38,7 +38,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <img src="/logo-carcara.jpg" alt="Carcará" style={{ width: 34, borderRadius: 6 }} />
           <div>
             <div className="title">CARCARÁ</div>
-            <div className="subtitle">SISTEMA DE MISSÕES</div>
+            <div className="subtitle">GESTÃO CARCARÁS</div>
           </div>
         </div>
         <nav className="nav">

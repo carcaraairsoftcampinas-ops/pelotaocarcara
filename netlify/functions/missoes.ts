@@ -2,8 +2,34 @@ import { v4 as uuidv4 } from "uuid";
 import { json, readJson, handleErrors, HttpError } from "./_lib/http";
 import { requireUser, requirePerfil } from "./_lib/session";
 import { listAll, getById, upsert, remove, store, nextMissionNumber, STORES } from "./_lib/store";
+import { registrarLog } from "./_lib/log";
 import { totalItensCompra } from "../../shared/calc";
 import type { Missao, ItemCompra, ItemNecessario, SessionUser } from "../../shared/types";
+
+// Rótulos legíveis dos campos comparados entre a versão antiga e a nova de
+// uma missão editada — usado só pra montar o texto do log de auditoria.
+const CAMPOS_MISSAO: [string, keyof Missao][] = [
+  ["Nome", "nome"],
+  ["Data", "data"],
+  ["Campo", "campoId"],
+  ["Resumo", "resumo"],
+  ["Objetivos", "objetivos"],
+  ["Quantidade de operadores", "quantidadeOperadores"],
+  ["Itens da missão", "itensNecessarios"],
+  ["Itens de compra", "itensCompra"],
+  ["Cartas", "cartas"],
+  ["Imagens", "imagens"],
+];
+
+function camposAlterados(antigo: Missao, novo: Missao): string[] {
+  return CAMPOS_MISSAO.filter(([, key]) => JSON.stringify(antigo[key]) !== JSON.stringify(novo[key])).map(
+    ([label]) => label
+  );
+}
+
+function nomeLog(m: Missao): string {
+  return `${m.nome}${m.numero ? ` (${m.numero})` : ""}`;
+}
 
 interface AnexoRef {
   blobKey: string;
@@ -196,6 +222,14 @@ export default async (req: Request): Promise<Response> => {
       }
 
       await upsert(STORES.missoes, record);
+      await registrarLog({
+        entidadeTipo: "missao",
+        entidadeId: record.id,
+        entidadeNome: nomeLog(record),
+        acao: record.status === "Enviado Análise" ? "Missão criada e enviada para análise" : "Missão criada (Rascunho)",
+        colaboradorId: user.colaboradorId,
+        colaboradorNome: user.nome,
+      });
       return json(201, record);
     }
 
@@ -269,6 +303,16 @@ export default async (req: Request): Promise<Response> => {
       }
 
       await upsert(STORES.missoes, updated);
+      const alterados = camposAlterados(existing, updated);
+      await registrarLog({
+        entidadeTipo: "missao",
+        entidadeId: updated.id,
+        entidadeNome: nomeLog(updated),
+        acao: input.action === "submit" ? "Missão editada e enviada para análise" : "Missão editada",
+        detalhes: alterados.length > 0 ? `Campos alterados: ${alterados.join(", ")}.` : "Nenhum campo alterado.",
+        colaboradorId: user.colaboradorId,
+        colaboradorNome: user.nome,
+      });
       return json(200, updated);
     }
 
@@ -285,6 +329,14 @@ export default async (req: Request): Promise<Response> => {
       for (const c of existing.cartas) await s.delete(c.blobKey).catch(() => {});
       for (const i of existing.imagens) await s.delete(i.blobKey).catch(() => {});
       await remove(STORES.missoes, id);
+      await registrarLog({
+        entidadeTipo: "missao",
+        entidadeId: existing.id,
+        entidadeNome: nomeLog(existing),
+        acao: "Missão excluída",
+        colaboradorId: user.colaboradorId,
+        colaboradorNome: user.nome,
+      });
       return json(200, { ok: true });
     }
 

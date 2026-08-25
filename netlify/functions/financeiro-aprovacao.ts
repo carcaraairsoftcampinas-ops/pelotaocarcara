@@ -1,7 +1,16 @@
 import { json, readJson, handleErrors, HttpError } from "./_lib/http";
 import { requireUser, requirePerfil } from "./_lib/session";
 import { getById, upsert, STORES } from "./_lib/store";
-import type { LancamentoFinanceiro } from "../../shared/types";
+import { registrarLog } from "./_lib/log";
+import type { LancamentoFinanceiro, Missao } from "../../shared/types";
+
+async function nomeLog(l: LancamentoFinanceiro): Promise<string> {
+  if (l.tipo === "missao" && l.missaoId) {
+    const m = await getById<Missao>(STORES.missoes, l.missaoId);
+    if (m) return `${m.nome}${m.numero ? ` (${m.numero})` : ""}`;
+  }
+  return l.nomeProjeto || "Projeto";
+}
 
 interface ActionInput {
   id: string;
@@ -56,6 +65,16 @@ export default async (req: Request): Promise<Response> => {
     }
 
     await upsert(STORES.financeiro, lancamento);
+
+    await registrarLog({
+      entidadeTipo: "financeiro",
+      entidadeId: lancamento.id,
+      entidadeNome: await nomeLog(lancamento),
+      acao: input.action === "aprovar" ? "Lançamento aprovado (Financeiro Aprovado)" : "Lançamento reprovado (Financeiro Pendente)",
+      detalhes: input.observacao.trim(),
+      colaboradorId: user.colaboradorId,
+      colaboradorNome: user.nome,
+    });
 
     return json(200, lancamento);
   });

@@ -12,6 +12,7 @@ export const STORES = {
   financeiro: "financeiro",
   counters: "counters",
   arquivos: "arquivos",
+  logs: "logs",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];

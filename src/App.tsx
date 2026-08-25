@@ -21,6 +21,7 @@ import CaixaGeral from "./pages/financeiro/CaixaGeral";
 import AprovacaoFinanceira from "./pages/financeiro/AprovacaoFinanceira";
 import ListaOperadores from "./pages/operadores/ListaOperadores";
 import RelatorioPresencas from "./pages/operadores/RelatorioPresencas";
+import Logs from "./pages/Logs";
 
 function Protected({
   perfis,
@@ -133,6 +134,8 @@ export default function App() {
           <Protected perfis={["Administrador", "Coordenador", "Colaborador"]}>{<RelatorioPresencas />}</Protected>
         }
       />
+
+      <Route path="/logs" element={<Protected>{<Logs />}</Protected>} />
 
       <Route path="*" element={<Protected>{<Home />}</Protected>} />
     </Routes>

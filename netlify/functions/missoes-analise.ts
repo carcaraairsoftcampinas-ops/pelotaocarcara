@@ -1,7 +1,16 @@
 import { json, readJson, handleErrors, HttpError } from "./_lib/http";
 import { requireUser, requirePerfil } from "./_lib/session";
 import { getById, upsert, STORES } from "./_lib/store";
+import { registrarLog } from "./_lib/log";
 import type { Missao } from "../../shared/types";
+
+const ACAO_LOG: Record<Action, string> = {
+  iniciar: "Análise iniciada",
+  aprovar: "Missão aprovada",
+  reprovar: "Missão reprovada",
+  pendencia: "Pendência enviada",
+  avaliar: "Missão avaliada e finalizada",
+};
 
 type Action = "iniciar" | "aprovar" | "reprovar" | "pendencia" | "avaliar";
 
@@ -78,6 +87,20 @@ export default async (req: Request): Promise<Response> => {
     }
 
     await upsert(STORES.missoes, missao);
+
+    const detalhesLog =
+      input.action === "avaliar"
+        ? `${input.estrelas} estrela(s)${input.comentario ? ` — ${input.comentario.trim()}` : ""}`
+        : input.observacao?.trim() || undefined;
+    await registrarLog({
+      entidadeTipo: "missao",
+      entidadeId: missao.id,
+      entidadeNome: `${missao.nome}${missao.numero ? ` (${missao.numero})` : ""}`,
+      acao: ACAO_LOG[input.action],
+      detalhes: detalhesLog,
+      colaboradorId: user.colaboradorId,
+      colaboradorNome: user.nome,
+    });
 
     return json(200, missao);
   });

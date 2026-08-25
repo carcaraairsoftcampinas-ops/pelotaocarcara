@@ -136,7 +136,8 @@ export default function AvaliacaoMissoes() {
       </div>
 
       {selecionada && (
-        <div className="card">
+        <div className="modal-overlay" onClick={() => setSelecionada(null)}>
+        <div className="modal-box modal-box-lg" onClick={(e) => e.stopPropagation()}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h2>
               {selecionada.nome} ({selecionada.numero})
@@ -187,6 +188,7 @@ export default function AvaliacaoMissoes() {
               Fechar
             </button>
           </div>
+        </div>
         </div>
       )}
     </div>

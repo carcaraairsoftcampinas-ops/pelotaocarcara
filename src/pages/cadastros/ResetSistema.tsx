@@ -14,6 +14,7 @@ const NOMES_STORE: Record<string, string> = {
   financeiro: "Lançamentos financeiros",
   counters: "Contadores de numeração",
   arquivos: "Arquivos anexados",
+  logs: "Logs de auditoria",
 };
 
 export default function ResetSistema() {
@@ -96,8 +97,9 @@ export default function ResetSistema() {
         <h2>Apagar todos os dados e começar do zero</h2>
         <p>
           Esta ação apaga <strong>permanentemente</strong> todos os registros do sistema — Missões, Colaboradores,
-          Campos, Operadores, lançamentos do Financeiro e os arquivos anexados — e zera os contadores de
-          numeração (a próxima missão volta a ser 001 do ano, o próximo operador volta a ser 0001 do ano).
+          Campos, Operadores, lançamentos do Financeiro, os arquivos anexados e também os Logs de auditoria — e
+          zera os contadores de numeração (a próxima missão volta a ser 001 do ano, o próximo operador volta a
+          ser 0001 do ano).
         </p>
         <p>
           <strong>Não pode ser desfeito.</strong> Use só se quiser limpar dados de teste antes de colocar o
