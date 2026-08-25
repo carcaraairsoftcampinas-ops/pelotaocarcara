@@ -5,7 +5,7 @@ import { useAuth } from "../lib/AuthContext";
 export default function Home() {
   const { has } = useAuth();
   if (has("Administrador", "Coordenador", "Colaborador")) return <Navigate to="/missoes/consulta" replace />;
-  if (has("Financeiro")) return <Navigate to="/financeiro/lancamento" replace />;
+  if (has("Financeiro")) return <Navigate to="/financeiro/movimentacao" replace />;
   return (
     <div className="card">
       <h2>Bem-vindo</h2>
