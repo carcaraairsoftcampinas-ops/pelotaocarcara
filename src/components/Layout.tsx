@@ -7,7 +7,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { user, has, logout } = useAuth();
   const location = useLocation();
 
-  const visibleGroups = useMemo(() => MENU.filter((g) => has(...g.perfis)), [has]);
+  const visibleGroups = useMemo(
+    () =>
+      MENU.filter((g) => has(...g.perfis))
+        .map((g) => ({ ...g, items: g.items.filter((i) => has(...(i.perfis || g.perfis))) }))
+        .filter((g) => g.items.length > 0),
+    [has]
+  );
   const activeGroupLabel = useMemo(
     () => visibleGroups.find((g) => g.items.some((i) => location.pathname.startsWith(i.path)))?.label,
     [visibleGroups, location.pathname]

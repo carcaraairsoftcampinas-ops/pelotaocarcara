@@ -16,8 +16,16 @@ export const STORES = {
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];
 
+// Consistência "strong": por padrão o Netlify Blobs é eventualmente
+// consistente (uma leitura logo após uma escrita pode não enxergar o valor
+// novo ainda, em réplicas/edges diferentes). Isso é inofensivo pra maioria
+// das telas, mas quebra a numeração sequencial abaixo (leitura de
+// verificação logo após o `setJSON` batendo numa réplica desatualizada),
+// gerando "Não foi possível gerar o número sequencial" mesmo sem nenhuma
+// concorrência real. Forçando "strong" aqui evita isso — o custo de
+// latência é mínimo pro volume de uso do time.
 export function store(name: StoreName) {
-  return getStore(name);
+  return getStore({ name, consistency: "strong" });
 }
 
 // Converte base64 -> ArrayBuffer "puro" (não um Uint8Array/Buffer), que é o

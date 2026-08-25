@@ -161,7 +161,7 @@ export default function AvaliacaoMissoes() {
               <Field label="Avaliação (1 a 5 estrelas)" required>
                 <StarPicker value={estrelas} onChange={setEstrelas} />
               </Field>
-              <Field label="Total de operadores presentes" required>
+              <Field label="Qtde Operadores Presentes" required>
                 <input
                   type="number"
                   min={1}

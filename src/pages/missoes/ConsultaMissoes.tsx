@@ -13,6 +13,7 @@ export default function ConsultaMissoes() {
   const { has, user } = useAuth();
   const navigate = useNavigate();
   const podeVerTudo = has("Administrador", "Coordenador");
+  const somenteColaborador = !!user && user.perfis.includes("Colaborador") && !user.perfis.some((p) => p !== "Colaborador");
 
   const [missoes, setMissoes] = useState<Missao[]>([]);
   const [campos, setCampos] = useState<Campo[]>([]);
@@ -110,7 +111,7 @@ export default function ConsultaMissoes() {
               </select>
             </Field>
           )}
-          {podeVerTudo && (
+          {podeVerTudo && !somenteColaborador && (
             <Field label="Avaliação mínima">
               <select value={estrelasMin} onChange={(e) => setEstrelasMin(e.target.value)}>
                 <option value="">Todas</option>
@@ -138,12 +139,12 @@ export default function ConsultaMissoes() {
                 <tr>
                   <th>Status</th>
                   <th>Número</th>
-                  <th>Nome</th>
+                  <th>NOME DA MISSÃO</th>
                   <th>Data</th>
                   <th>Data de criação</th>
                   <th>Campo</th>
                   <th>Colaborador</th>
-                  <th>Avaliação</th>
+                  {!somenteColaborador && <th>Avaliação</th>}
                 </tr>
               </thead>
               <tbody>
@@ -158,7 +159,7 @@ export default function ConsultaMissoes() {
                     <td>{m.dataEnvioAnalise ? formatDate(m.dataEnvioAnalise) : "—"}</td>
                     <td>{campoNome(m.campoId)}</td>
                     <td>{m.criadoPorNome}</td>
-                    <td>{m.avaliacao ? "★".repeat(m.avaliacao.estrelas) : "—"}</td>
+                    {!somenteColaborador && <td>{m.avaliacao ? "★".repeat(m.avaliacao.estrelas) : "—"}</td>}
                   </tr>
                 ))}
               </tbody>

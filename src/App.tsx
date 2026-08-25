@@ -15,9 +15,11 @@ import CamposDisponiveis from "./pages/missoes/CamposDisponiveis";
 import Inventario from "./pages/missoes/Inventario";
 import AnaliseMissoes from "./pages/analise/AnaliseMissoes";
 import AvaliacaoMissoes from "./pages/analise/AvaliacaoMissoes";
-import LancamentoFinanceiro from "./pages/financeiro/LancamentoFinanceiro";
+import MovimentacaoFinanceira from "./pages/financeiro/MovimentacaoFinanceira";
 import CaixaGeral from "./pages/financeiro/CaixaGeral";
-import AprovacaoFinanceira from "./pages/aprovacao/AprovacaoFinanceira";
+import AprovacaoFinanceira from "./pages/financeiro/AprovacaoFinanceira";
+import ListaOperadores from "./pages/operadores/ListaOperadores";
+import RelatorioPresencas from "./pages/operadores/RelatorioPresencas";
 
 function Protected({
   perfis,
@@ -100,9 +102,9 @@ export default function App() {
       />
 
       <Route
-        path="/financeiro/lancamento"
+        path="/financeiro/movimentacao"
         element={
-          <Protected perfis={["Administrador", "Financeiro", "Coordenador"]}>{<LancamentoFinanceiro />}</Protected>
+          <Protected perfis={["Administrador", "Financeiro", "Coordenador"]}>{<MovimentacaoFinanceira />}</Protected>
         }
       />
       <Route
@@ -111,7 +113,20 @@ export default function App() {
       />
       <Route
         path="/financeiro/aprovacao"
-        element={<Protected perfis={["Administrador"]}>{<AprovacaoFinanceira />}</Protected>}
+        element={<Protected perfis={["Administrador", "Coordenador"]}>{<AprovacaoFinanceira />}</Protected>}
+      />
+
+      <Route
+        path="/operadores/lista"
+        element={
+          <Protected perfis={["Administrador", "Coordenador", "Colaborador"]}>{<ListaOperadores />}</Protected>
+        }
+      />
+      <Route
+        path="/operadores/presencas"
+        element={
+          <Protected perfis={["Administrador", "Coordenador", "Colaborador"]}>{<RelatorioPresencas />}</Protected>
+        }
       />
 
       <Route path="*" element={<Protected>{<Home />}</Protected>} />

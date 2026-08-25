@@ -5,50 +5,53 @@ import type { LancamentoFinanceiro } from "../../shared/types";
 
 interface ActionInput {
   id: string;
-  action: "salvar" | "aprovar" | "reprovar";
+  action: "aprovar" | "reprovar";
   observacao?: string;
 }
 
 export default async (req: Request): Promise<Response> => {
   return handleErrors(async () => {
     const user = requireUser(req);
-    requirePerfil(user, ["Administrador"]);
+    requirePerfil(user, ["Administrador", "Coordenador"]);
     if (req.method !== "POST") throw new HttpError(405, "Método não permitido.");
 
     const input = await readJson<ActionInput>(req);
     if (!input.id || !input.action) throw new HttpError(400, "id e action são obrigatórios.");
+    if (!input.observacao?.trim()) {
+      throw new HttpError(400, "Observações são obrigatórias para aprovar ou reprovar.");
+    }
 
     const lancamento = await getById<LancamentoFinanceiro>(STORES.financeiro, input.id);
     if (!lancamento) throw new HttpError(404, "Lançamento não encontrado.");
 
-    if (input.action !== "salvar" && lancamento.status !== "Enviado Análise Financeira") {
-      throw new HttpError(400, `Só é possível ${input.action === "aprovar" ? "aprovar" : "reprovar"} lançamentos enviados para análise financeira.`);
-    }
-    if (lancamento.status === "Aprovado") {
+    if (lancamento.status === "Financeiro Aprovado") {
       throw new HttpError(400, "Este lançamento já foi aprovado e não pode mais ser alterado.");
+    }
+    if (lancamento.status !== "Aprovação Pendente") {
+      throw new HttpError(400, "Só é possível aprovar ou reprovar lançamentos com status Aprovação Pendente.");
     }
 
     const now = new Date().toISOString();
-    lancamento.observacaoAprovacao = input.observacao?.trim() || lancamento.observacaoAprovacao;
+    lancamento.observacaoAprovacao = input.observacao.trim();
     lancamento.updatedAt = now;
 
     if (input.action === "aprovar") {
-      lancamento.status = "Aprovado";
+      lancamento.status = "Financeiro Aprovado";
       lancamento.historicoStatus.push({
-        status: "Aprovado",
+        status: "Financeiro Aprovado",
         data: now,
         colaboradorId: user.colaboradorId,
         colaboradorNome: user.nome,
-        observacao: input.observacao?.trim() || undefined,
+        observacao: input.observacao.trim(),
       });
-    } else if (input.action === "reprovar") {
-      lancamento.status = "Reprovado";
+    } else {
+      lancamento.status = "Financeiro Pendente";
       lancamento.historicoStatus.push({
-        status: "Reprovado",
+        status: "Financeiro Pendente",
         data: now,
         colaboradorId: user.colaboradorId,
         colaboradorNome: user.nome,
-        observacao: input.observacao?.trim() || undefined,
+        observacao: input.observacao.trim(),
       });
     }
 

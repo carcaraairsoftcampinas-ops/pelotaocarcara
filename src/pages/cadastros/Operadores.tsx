@@ -3,23 +3,48 @@ import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
 import { api, ApiError } from "../../lib/api";
 import { useActionNotice } from "../../lib/ActionNoticeContext";
-import { GRUPOS_OPERADOR } from "../../../shared/types";
-import type { GrupoOperador, Operador } from "../../../shared/types";
+import { GRUPOS_WHATSAPP, PATCHES } from "../../../shared/types";
+import type { GrupoWhatsapp, Patch, Operador } from "../../../shared/types";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
+const DIAS = Array.from({ length: 31 }, (_, i) => i + 1);
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function maskTelefone(value: string) {
+  const d = value.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 2) return d.length ? `(${d}` : "";
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
+function maskMilsim(value: string) {
+  const raw = value.toUpperCase().replace(/[^0-9M]/g, "");
+  const digitsOnly = raw.replace(/M/g, "");
+  const d1 = digitsOnly.slice(0, 2);
+  const d2 = digitsOnly.slice(2, 4);
+  if (d1.length < 2) return d1;
+  return d2.length ? `${d1}M${d2}` : `${d1}M`;
+}
+
 const EMPTY = {
   nome: "",
   sobrenome: "",
   nomeNaLista: "",
+  aniversarioDia: "",
   aniversarioMes: "",
-  aniversarioAno: "",
   email: "",
   telefone: "",
-  grupos: [] as GrupoOperador[],
+  grupoWhatsapp: "" as GrupoWhatsapp | "",
+  patch: "" as Patch | "",
+  operadorMilsim: false,
+  numeroMilsim: "",
+  historico: "",
+  status: "Ativo" as "Ativo" | "Inativo",
 };
 
 export default function Operadores() {
@@ -59,38 +84,55 @@ export default function Operadores() {
       nome: o.nome,
       sobrenome: o.sobrenome,
       nomeNaLista: o.nomeNaLista,
+      aniversarioDia: o.aniversarioDia != null ? String(o.aniversarioDia) : "",
       aniversarioMes: o.aniversarioMes != null ? String(o.aniversarioMes) : "",
-      aniversarioAno: o.aniversarioAno != null ? String(o.aniversarioAno) : "",
       email: o.email,
       telefone: o.telefone,
-      grupos: o.grupos,
+      grupoWhatsapp: o.grupoWhatsapp || "",
+      patch: o.patch || "",
+      operadorMilsim: o.operadorMilsim,
+      numeroMilsim: o.numeroMilsim || "",
+      historico: o.historico || "",
+      status: o.status,
     });
     setEditingId(o.id);
     setFormOpen(true);
     setError(null);
   }
 
-  function toggleGrupo(g: GrupoOperador) {
-    setForm((f) => ({
-      ...f,
-      grupos: f.grupos.includes(g) ? f.grupos.filter((x) => x !== g) : [...f.grupos, g],
-    }));
-  }
-
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
     setError(null);
+
+    if (!EMAIL_RE.test(form.email.trim())) {
+      setError("E-mail inválido.");
+      return;
+    }
+    if (!/^\(\d{2}\) \d{5}-\d{4}$/.test(form.telefone.trim())) {
+      setError("Telefone inválido. Use o formato (XX) XXXXX-XXXX.");
+      return;
+    }
+    if (form.operadorMilsim && !/^\d{2}M\d{2}$/.test(form.numeroMilsim.trim())) {
+      setError("Número Milsim inválido. Use o formato XXMXX.");
+      return;
+    }
+
+    setSaving(true);
     try {
       const payload = {
         nome: form.nome,
         sobrenome: form.sobrenome,
         nomeNaLista: form.nomeNaLista,
+        aniversarioDia: form.aniversarioDia ? Number(form.aniversarioDia) : null,
         aniversarioMes: form.aniversarioMes ? Number(form.aniversarioMes) : null,
-        aniversarioAno: form.aniversarioAno ? Number(form.aniversarioAno) : null,
         email: form.email,
         telefone: form.telefone,
-        grupos: form.grupos,
+        grupoWhatsapp: form.grupoWhatsapp || null,
+        patch: form.patch || null,
+        operadorMilsim: form.operadorMilsim,
+        numeroMilsim: form.operadorMilsim ? form.numeroMilsim : null,
+        historico: form.historico,
+        status: form.status,
       };
       if (editingId) {
         await api.put(`/operadores`, { id: editingId, ...payload });
@@ -150,6 +192,19 @@ export default function Operadores() {
               />
             </Field>
             <div className="grid grid-2">
+              <Field label="Aniversário — dia">
+                <select
+                  value={form.aniversarioDia}
+                  onChange={(e) => setForm({ ...form, aniversarioDia: e.target.value })}
+                >
+                  <option value="">—</option>
+                  {DIAS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label="Aniversário — mês">
                 <select
                   value={form.aniversarioMes}
@@ -163,46 +218,98 @@ export default function Operadores() {
                   ))}
                 </select>
               </Field>
-              <Field label="Aniversário — ano">
-                <input
-                  type="number"
-                  min={1900}
-                  max={2100}
-                  value={form.aniversarioAno}
-                  onChange={(e) => setForm({ ...form, aniversarioAno: e.target.value })}
-                />
-              </Field>
             </div>
             <div className="grid grid-2">
-              <Field label="E-mail" required>
+              <Field label="E-mail" required hint="Formato: email@email.com">
                 <input
                   type="email"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="email@email.com"
                   required
                 />
               </Field>
-              <Field label="Número de telefone" required>
+              <Field label="Número de telefone" required hint="Formato: (XX) XXXXX-XXXX">
                 <input
                   type="tel"
                   value={form.telefone}
-                  onChange={(e) => setForm({ ...form, telefone: e.target.value })}
+                  onChange={(e) => setForm({ ...form, telefone: maskTelefone(e.target.value) })}
+                  placeholder="(11) 91234-5678"
                   required
                 />
               </Field>
             </div>
-            <Field label="Grupos" required hint="Pode selecionar mais de um.">
-              <div className="checkbox-group">
-                {GRUPOS_OPERADOR.map((g) => (
-                  <label className="checkbox-row" key={g}>
-                    <input type="checkbox" checked={form.grupos.includes(g)} onChange={() => toggleGrupo(g)} />
-                    {g}
-                  </label>
-                ))}
-              </div>
+            <div className="grid grid-2">
+              <Field label="Grupo WhatsApp">
+                <select
+                  value={form.grupoWhatsapp}
+                  onChange={(e) => setForm({ ...form, grupoWhatsapp: e.target.value as GrupoWhatsapp | "" })}
+                >
+                  <option value="">—</option>
+                  {GRUPOS_WHATSAPP.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Patch">
+                <select
+                  value={form.patch}
+                  onChange={(e) => setForm({ ...form, patch: e.target.value as Patch | "" })}
+                >
+                  <option value="">—</option>
+                  {PATCHES.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div className="grid grid-2">
+              <Field label="Operador Milsim Squad">
+                <select
+                  value={form.operadorMilsim ? "Sim" : "Não"}
+                  onChange={(e) =>
+                    setForm({ ...form, operadorMilsim: e.target.value === "Sim", numeroMilsim: e.target.value === "Sim" ? form.numeroMilsim : "" })
+                  }
+                >
+                  <option value="Não">Não</option>
+                  <option value="Sim">Sim</option>
+                </select>
+              </Field>
+              {form.operadorMilsim && (
+                <Field label="Número Milsim" required hint="Formato: XXMXX">
+                  <input
+                    type="text"
+                    value={form.numeroMilsim}
+                    onChange={(e) => setForm({ ...form, numeroMilsim: maskMilsim(e.target.value) })}
+                    placeholder="12M34"
+                    maxLength={5}
+                    required
+                  />
+                </Field>
+              )}
+            </div>
+            <Field label="Histórico">
+              <textarea
+                value={form.historico}
+                onChange={(e) => setForm({ ...form, historico: e.target.value })}
+                rows={3}
+              />
+            </Field>
+            <Field label="Status" required>
+              <select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value as "Ativo" | "Inativo" })}
+              >
+                <option value="Ativo">ATIVO</option>
+                <option value="Inativo">INATIVO</option>
+              </select>
             </Field>
             <div className="btn-row">
-              <button className="btn btn-primary" type="submit" disabled={saving || form.grupos.length === 0}>
+              <button className="btn btn-primary" type="submit" disabled={saving}>
                 {saving ? "Salvando…" : "Salvar"}
               </button>
               <button className="btn btn-secondary" type="button" onClick={() => setFormOpen(false)}>
@@ -237,7 +344,10 @@ export default function Operadores() {
                   <th>Aniversário</th>
                   <th>E-mail</th>
                   <th>Telefone</th>
-                  <th>Grupos</th>
+                  <th>Grupo WhatsApp</th>
+                  <th>Patch</th>
+                  <th>Milsim</th>
+                  <th>Status</th>
                   <th></th>
                 </tr>
               </thead>
@@ -249,17 +359,16 @@ export default function Operadores() {
                       {o.nome} {o.sobrenome}
                     </td>
                     <td>{o.nomeNaLista}</td>
-                    <td>{o.aniversarioMes ? `${MESES[o.aniversarioMes - 1]}${o.aniversarioAno ? "/" + o.aniversarioAno : ""}` : "—"}</td>
+                    <td>{o.aniversarioDia && o.aniversarioMes ? `${o.aniversarioDia}/${MESES[o.aniversarioMes - 1]}` : "—"}</td>
                     <td>{o.email}</td>
                     <td>{o.telefone}</td>
+                    <td>{o.grupoWhatsapp || "—"}</td>
+                    <td>{o.patch || "—"}</td>
+                    <td>{o.operadorMilsim ? o.numeroMilsim : "—"}</td>
                     <td>
-                      <div className="tag-list">
-                        {o.grupos.map((g) => (
-                          <span className="tag" key={g}>
-                            {g}
-                          </span>
-                        ))}
-                      </div>
+                      <span className="tag" style={{ color: o.status === "Ativo" ? "#7be395" : "#ff8080" }}>
+                        {o.status === "Ativo" ? "ATIVO" : "INATIVO"}
+                      </span>
                     </td>
                     <td>
                       <button className="link-btn" onClick={() => editar(o)}>

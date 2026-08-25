@@ -11,6 +11,7 @@ const EMPTY = {
   endereco: { rua: "", numero: "", bairro: "", cidade: "", cep: "" },
   localizacaoGoogle: "",
   localizacaoGps: "",
+  status: "Ativo" as "Ativo" | "Inativo",
 };
 
 export default function Campos() {
@@ -58,6 +59,7 @@ export default function Campos() {
       endereco: c.endereco,
       localizacaoGoogle: c.localizacaoGoogle,
       localizacaoGps: c.localizacaoGps,
+      status: c.ativo ? "Ativo" : "Inativo",
     });
     setMapaFile(null);
     setRemoverMapa(false);
@@ -78,6 +80,7 @@ export default function Campos() {
         endereco: form.endereco,
         localizacaoGoogle: form.localizacaoGoogle,
         localizacaoGps: form.localizacaoGps,
+        ativo: form.status === "Ativo",
       };
       if (mapaFile) {
         // Envia o arquivo primeiro (chamada própria) e só manda a referência
@@ -112,16 +115,6 @@ export default function Campos() {
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao excluir.");
-    }
-  }
-
-  async function alternarAtivo(c: Campo) {
-    try {
-      await api.put(`/campos`, { id: c.id, ativo: !c.ativo });
-      notify(`Campo "${c.nome}" agora está ${!c.ativo ? "Ativo" : "Inativo"}.`);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Erro ao alterar status do campo.");
     }
   }
 
@@ -217,6 +210,16 @@ export default function Campos() {
               </Field>
             </div>
 
+            <Field label="Status" required>
+              <select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value as "Ativo" | "Inativo" })}
+              >
+                <option value="Ativo">ATIVO</option>
+                <option value="Inativo">INATIVO</option>
+              </select>
+            </Field>
+
             <Field label="Anexar mapa do local" hint="Imagem ou PDF do mapa do campo (máx. 8MB).">
               {editingMapaAtual && !mapaFile && !removerMapa && (
                 <div className="attach-chip" style={{ marginBottom: 8 }}>
@@ -292,14 +295,9 @@ export default function Campos() {
                       )}
                     </td>
                     <td>
-                      <button
-                        className="tag"
-                        style={{ border: "none", cursor: "pointer", color: c.ativo ? "#7be395" : "#ff8080" }}
-                        onClick={() => alternarAtivo(c)}
-                        title="Clique para alternar"
-                      >
+                      <span className="tag" style={{ color: c.ativo ? "#7be395" : "#ff8080" }}>
                         {c.ativo ? "Ativo" : "Inativo"}
-                      </button>
+                      </span>
                     </td>
                     <td>
                       <button className="link-btn" onClick={() => editar(c)}>

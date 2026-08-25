@@ -3,6 +3,7 @@ import type { Perfil } from "../../shared/types";
 export interface MenuItem {
   label: string;
   path: string;
+  perfis?: Perfil[]; // se ausente, usa os perfis do grupo
 }
 
 export interface MenuGroup {
@@ -43,13 +44,17 @@ export const MENU: MenuGroup[] = [
     label: "Financeiro",
     perfis: ["Administrador", "Financeiro", "Coordenador"],
     items: [
-      { label: "Lançamento Financeiro", path: "/financeiro/lancamento" },
+      { label: "Movimentação Financeira", path: "/financeiro/movimentacao" },
       { label: "Caixa Geral", path: "/financeiro/caixa" },
+      { label: "Aprovação Financeira", path: "/financeiro/aprovacao", perfis: ["Administrador", "Coordenador"] },
     ],
   },
   {
-    label: "Aprovação Financeira",
-    perfis: ["Administrador"],
-    items: [{ label: "Aprovação Financeira", path: "/financeiro/aprovacao" }],
+    label: "Operadores",
+    perfis: ["Administrador", "Coordenador", "Colaborador"],
+    items: [
+      { label: "Lista de operadores", path: "/operadores/lista" },
+      { label: "Relatório de Presenças", path: "/operadores/presencas" },
+    ],
   },
 ];

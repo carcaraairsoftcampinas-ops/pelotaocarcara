@@ -1,33 +1,57 @@
 import { json, readJson, handleErrors, HttpError } from "./_lib/http";
 import { requireUser, requirePerfil } from "./_lib/session";
 import { listAll, getById, upsert, remove, nextOperadorId, STORES } from "./_lib/store";
-import { GRUPOS_OPERADOR } from "../../shared/types";
-import type { Operador, GrupoOperador } from "../../shared/types";
+import { GRUPOS_WHATSAPP, PATCHES } from "../../shared/types";
+import type { Operador, GrupoWhatsapp, Patch, StatusOperador } from "../../shared/types";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TELEFONE_RE = /^\(\d{2}\) \d{5}-\d{4}$/;
+const MILSIM_RE = /^\d{2}M\d{2}$/i;
 
 interface OperadorInput {
   id?: string;
   nome?: string;
   sobrenome?: string;
   nomeNaLista?: string;
+  aniversarioDia?: number | null;
   aniversarioMes?: number | null;
-  aniversarioAno?: number | null;
   email?: string;
   telefone?: string;
-  grupos?: GrupoOperador[];
+  grupoWhatsapp?: GrupoWhatsapp | null;
+  patch?: Patch | null;
+  operadorMilsim?: boolean;
+  numeroMilsim?: string | null;
+  historico?: string;
+  status?: StatusOperador;
 }
 
 function validar(input: OperadorInput) {
   if (!input.nome?.trim()) throw new HttpError(400, "Nome é obrigatório.");
   if (!input.sobrenome?.trim()) throw new HttpError(400, "Sobrenome é obrigatório.");
   if (!input.nomeNaLista?.trim()) throw new HttpError(400, "Nome na lista é obrigatório.");
-  if (!input.email || !EMAIL_RE.test(input.email)) throw new HttpError(400, "E-mail inválido.");
-  if (!input.telefone?.trim()) throw new HttpError(400, "Número de telefone é obrigatório.");
-  if (!input.grupos || input.grupos.length === 0) throw new HttpError(400, "Selecione ao menos um grupo.");
-  if (input.grupos.some((g) => !GRUPOS_OPERADOR.includes(g))) throw new HttpError(400, "Grupo inválido.");
+  if (!input.email || !EMAIL_RE.test(input.email.trim())) throw new HttpError(400, "E-mail inválido.");
+  if (!input.telefone || !TELEFONE_RE.test(input.telefone.trim())) {
+    throw new HttpError(400, "Telefone inválido. Use o formato (XX) XXXXX-XXXX.");
+  }
+  if (input.aniversarioDia != null && (input.aniversarioDia < 1 || input.aniversarioDia > 31)) {
+    throw new HttpError(400, "Dia de aniversário inválido.");
+  }
   if (input.aniversarioMes != null && (input.aniversarioMes < 1 || input.aniversarioMes > 12)) {
     throw new HttpError(400, "Mês de aniversário inválido.");
+  }
+  if (input.grupoWhatsapp != null && !GRUPOS_WHATSAPP.includes(input.grupoWhatsapp)) {
+    throw new HttpError(400, "Grupo WhatsApp inválido.");
+  }
+  if (input.patch != null && !PATCHES.includes(input.patch)) {
+    throw new HttpError(400, "Patch inválido.");
+  }
+  if (input.operadorMilsim) {
+    if (!input.numeroMilsim || !MILSIM_RE.test(input.numeroMilsim.trim())) {
+      throw new HttpError(400, "Número Milsim inválido. Use o formato XXMXX.");
+    }
+  }
+  if (input.status && input.status !== "Ativo" && input.status !== "Inativo") {
+    throw new HttpError(400, "Status inválido.");
   }
 }
 
@@ -60,11 +84,16 @@ export default async (req: Request): Promise<Response> => {
         nome: input.nome!.trim(),
         sobrenome: input.sobrenome!.trim(),
         nomeNaLista: input.nomeNaLista!.trim(),
+        aniversarioDia: input.aniversarioDia ?? null,
         aniversarioMes: input.aniversarioMes ?? null,
-        aniversarioAno: input.aniversarioAno ?? null,
         email: input.email!.trim().toLowerCase(),
         telefone: input.telefone!.trim(),
-        grupos: input.grupos!,
+        grupoWhatsapp: input.grupoWhatsapp ?? null,
+        patch: input.patch ?? null,
+        operadorMilsim: !!input.operadorMilsim,
+        numeroMilsim: input.operadorMilsim ? input.numeroMilsim!.trim().toUpperCase() : null,
+        historico: input.historico?.trim() || "",
+        status: input.status || "Ativo",
         createdAt: now,
         updatedAt: now,
       };
@@ -83,11 +112,16 @@ export default async (req: Request): Promise<Response> => {
         nome: input.nome!.trim(),
         sobrenome: input.sobrenome!.trim(),
         nomeNaLista: input.nomeNaLista!.trim(),
+        aniversarioDia: input.aniversarioDia ?? null,
         aniversarioMes: input.aniversarioMes ?? null,
-        aniversarioAno: input.aniversarioAno ?? null,
         email: input.email!.trim().toLowerCase(),
         telefone: input.telefone!.trim(),
-        grupos: input.grupos!,
+        grupoWhatsapp: input.grupoWhatsapp ?? null,
+        patch: input.patch ?? null,
+        operadorMilsim: !!input.operadorMilsim,
+        numeroMilsim: input.operadorMilsim ? input.numeroMilsim!.trim().toUpperCase() : null,
+        historico: input.historico?.trim() || "",
+        status: input.status || existing.status,
         updatedAt: new Date().toISOString(),
       };
       await upsert(STORES.operadores, updated);

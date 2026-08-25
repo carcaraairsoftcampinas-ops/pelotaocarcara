@@ -383,7 +383,7 @@ export default function NovaMissao() {
             <input
               type="file"
               multiple
-              accept="image/*,application/pdf"
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               onChange={(e) => selecionarArquivos(e.target.files, "carta", setNovasCartas)}
             />
           </Field>
@@ -424,7 +424,7 @@ export default function NovaMissao() {
             <input
               type="file"
               multiple
-              accept="image/*"
+              accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
               onChange={(e) => selecionarArquivos(e.target.files, "imagem", setNovasImagens)}
             />
           </Field>

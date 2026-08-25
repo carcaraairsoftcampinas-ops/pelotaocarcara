@@ -1,19 +1,19 @@
-import type { ItemCompra, ItemGasto, LancamentoFinanceiro } from "./types";
+import type { ItemCompra, ItemInvestimento, ItemCredito, LancamentoFinanceiro } from "./types";
 
 export function totalItensCompra(itens: ItemCompra[]): number {
   return itens.reduce((sum, i) => sum + (Number(i.quantidade) || 0) * (Number(i.valorUnitario) || 0), 0);
 }
 
-export function totalGastos(gastos: ItemGasto[]): number {
-  return gastos.reduce((sum, g) => sum + (Number(g.quantidade) || 0) * (Number(g.valorUnitario) || 0), 0);
+export function totalInvestimentos(itens: ItemInvestimento[]): number {
+  return itens.reduce((sum, i) => sum + (Number(i.quantidade) || 0) * (Number(i.valorUnitario) || 0), 0);
 }
 
-export function totalCreditos(creditos: LancamentoFinanceiro["creditos"]): number {
-  return (Number(creditos.pix) || 0) + (Number(creditos.especie) || 0) + (Number(creditos.outros) || 0);
+export function totalCreditosItens(itens: ItemCredito[]): number {
+  return itens.reduce((sum, c) => sum + (Number(c.valor) || 0), 0);
 }
 
-export function resultadoLancamento(l: Pick<LancamentoFinanceiro, "creditos" | "gastos">): number {
-  return totalCreditos(l.creditos) - totalGastos(l.gastos);
+export function resultadoLancamento(l: Pick<LancamentoFinanceiro, "creditos" | "investimentos">): number {
+  return totalCreditosItens(l.creditos) - totalInvestimentos(l.investimentos);
 }
 
 export function formatBRL(value: number): string {

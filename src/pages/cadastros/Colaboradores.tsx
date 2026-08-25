@@ -153,8 +153,8 @@ export default function Colaboradores() {
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value as "Ativo" | "Não Ativo" })}
               >
-                <option value="Ativo">Ativo (acessa o sistema normalmente)</option>
-                <option value="Não Ativo">Não Ativo (bloqueia imediatamente o acesso)</option>
+                <option value="Ativo">ATIVO</option>
+                <option value="Não Ativo">INATIVO</option>
               </select>
             </Field>
             <div className="btn-row">
