@@ -16,9 +16,8 @@ const PATCH_COLORS: Record<string, string> = {
 };
 
 // Cores fixas por posição do número Milsim (formato XXMXX, ex: 01M18):
-// 1º dígito=vermelho, 2º dígito=azul royal, letra M=branco, 4º dígito=azul,
-// 5º dígito=vermelho.
-const MILSIM_DIGIT_COLORS = ["#e33a3a", "#4169e1", "#ffffff", "#2f6fed", "#e33a3a"];
+// 1º e 2º dígito=azul royal, letra M=vermelho, 4º e 5º dígito=azul royal.
+const MILSIM_DIGIT_COLORS = ["#4169e1", "#4169e1", "#e33a3a", "#4169e1", "#4169e1"];
 
 function MilsimNumero({ numero }: { numero: string }) {
   return (
