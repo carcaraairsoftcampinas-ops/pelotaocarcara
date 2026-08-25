@@ -33,6 +33,25 @@ export interface Campo {
   localizacaoGps: string;
   mapaBlobKey: string | null;
   mapaNomeArquivo: string | null;
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type GrupoOperador = "Carcarás Amarelo" | "Carcarás Vermelho" | "Milsim Squad";
+
+export const GRUPOS_OPERADOR: GrupoOperador[] = ["Carcarás Amarelo", "Carcarás Vermelho", "Milsim Squad"];
+
+export interface Operador {
+  id: string; // ex: "0001-2026"
+  nome: string;
+  sobrenome: string;
+  nomeNaLista: string;
+  aniversarioMes: number | null; // 1-12
+  aniversarioAno: number | null;
+  email: string;
+  telefone: string;
+  grupos: GrupoOperador[];
   createdAt: string;
   updatedAt: string;
 }
@@ -44,6 +63,7 @@ export type StatusMissao =
   | "Pendência"
   | "Reprovada"
   | "Aprovada"
+  | "Aguardando Avaliação"
   | "Finalizada";
 
 export interface ItemCompra {
@@ -51,6 +71,11 @@ export interface ItemCompra {
   nome: string;
   quantidade: number;
   valorUnitario: number;
+}
+
+export interface ItemNecessario {
+  nome: string;
+  quantidade: number;
 }
 
 export interface HistoricoStatusEntry {
@@ -64,6 +89,7 @@ export interface HistoricoStatusEntry {
 export interface Avaliacao {
   estrelas: number;
   comentario: string;
+  totalOperadoresPresentes: number | null;
   avaliadoPor: string;
   avaliadoEm: string;
 }
@@ -78,7 +104,8 @@ export interface Missao {
   objetivos: string;
   cartas: { blobKey: string; nomeArquivo: string }[];
   imagens: { blobKey: string; nomeArquivo: string }[];
-  itensNecessarios: string[]; // lista de itens necessários p/ missão (obrigatório p/ enviar)
+  quantidadeOperadores: number | null; // quantidade planejada de operadores para a missão
+  itensNecessarios: ItemNecessario[]; // lista de itens necessários p/ missão, com quantidade (obrigatório p/ enviar)
   itensCompra: ItemCompra[]; // itens a comprar, se houver (opcional, soma o investimento)
   investimentoTotal: number;
   status: StatusMissao;
@@ -87,6 +114,7 @@ export interface Missao {
   observacoesAnalise: string;
   avaliacao: Avaliacao | null;
   historicoStatus: HistoricoStatusEntry[];
+  dataEnvioAnalise: string | null; // preenchida ao clicar em "Enviar para Análise"
   createdAt: string;
   updatedAt: string;
 }
@@ -134,12 +162,13 @@ export interface SessionUser {
 
 export const STATUS_MISSAO_COLORS: Record<StatusMissao, string> = {
   Rascunho: "#8a8f98",
-  "Enviado Análise": "#2f6fed",
-  "Em Análise": "#ef8c1f",
+  "Enviado Análise": "#ef8c1f",
+  "Em Análise": "#e0c419",
   Pendência: "#e33a3a",
   Reprovada: "#111214",
   Aprovada: "#2fa84f",
-  Finalizada: "#e0c419",
+  "Aguardando Avaliação": "#ec4899",
+  Finalizada: "#2f6fed",
 };
 
 export const STATUS_FINANCEIRO_COLORS: Record<StatusFinanceiro, string> = {
@@ -158,5 +187,6 @@ export const STATUS_MISSAO_ORDEM: StatusMissao[] = [
   "Pendência",
   "Reprovada",
   "Aprovada",
+  "Aguardando Avaliação",
   "Finalizada",
 ];
