@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
-import { api, ApiError, arquivoUrl, fileToBase64 } from "../../lib/api";
+import { api, ApiError, arquivoUrl, uploadArquivo } from "../../lib/api";
+import { useActionNotice } from "../../lib/ActionNoticeContext";
 import type { Campo } from "../../../shared/types";
 
 const EMPTY = {
@@ -13,12 +14,13 @@ const EMPTY = {
 };
 
 export default function Campos() {
+  const { notify } = useActionNotice();
   const [lista, setLista] = useState<Campo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY);
   const [mapaFile, setMapaFile] = useState<File | null>(null);
+  const [removerMapa, setRemoverMapa] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingMapaAtual, setEditingMapaAtual] = useState<{ key: string; nome: string } | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -42,11 +44,11 @@ export default function Campos() {
   function novo() {
     setForm(EMPTY);
     setMapaFile(null);
+    setRemoverMapa(false);
     setEditingId(null);
     setEditingMapaAtual(null);
     setFormOpen(true);
     setError(null);
-    setSuccess(null);
   }
 
   function editar(c: Campo) {
@@ -58,11 +60,11 @@ export default function Campos() {
       localizacaoGps: c.localizacaoGps,
     });
     setMapaFile(null);
+    setRemoverMapa(false);
     setEditingId(c.id);
     setEditingMapaAtual(c.mapaBlobKey ? { key: c.mapaBlobKey, nome: c.mapaNomeArquivo || "mapa" } : null);
     setFormOpen(true);
     setError(null);
-    setSuccess(null);
   }
 
   async function salvar(e: React.FormEvent) {
@@ -78,16 +80,20 @@ export default function Campos() {
         localizacaoGps: form.localizacaoGps,
       };
       if (mapaFile) {
-        payload.mapaBase64 = await fileToBase64(mapaFile);
-        payload.mapaNomeArquivo = mapaFile.name;
-        payload.mapaContentType = mapaFile.type;
+        // Envia o arquivo primeiro (chamada própria) e só manda a referência
+        // no salvamento do campo — evita payload grande demais numa só vez.
+        const up = await uploadArquivo(mapaFile);
+        payload.mapaBlobKey = up.blobKey;
+        payload.mapaNomeArquivo = up.nomeArquivo;
+      } else if (removerMapa) {
+        payload.removerMapa = true;
       }
       if (editingId) {
         await api.put(`/campos`, { id: editingId, ...payload });
-        setSuccess("Campo atualizado.");
+        notify("Campo atualizado com sucesso.");
       } else {
         await api.post(`/campos`, payload);
-        setSuccess("Campo cadastrado.");
+        notify("Campo cadastrado com sucesso.");
       }
       setFormOpen(false);
       await load();
@@ -102,9 +108,20 @@ export default function Campos() {
     if (!confirm(`Excluir o campo "${c.nome}"?`)) return;
     try {
       await api.del(`/campos?id=${c.id}`);
+      notify("Campo excluído com sucesso.");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao excluir.");
+    }
+  }
+
+  async function alternarAtivo(c: Campo) {
+    try {
+      await api.put(`/campos`, { id: c.id, ativo: !c.ativo });
+      notify(`Campo "${c.nome}" agora está ${!c.ativo ? "Ativo" : "Inativo"}.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Erro ao alterar status do campo.");
     }
   }
 
@@ -112,7 +129,6 @@ export default function Campos() {
     <div>
       <PageHeader crumbs="Cadastros" title="Cadastro de Campos" />
       <Banner type="error">{error}</Banner>
-      <Banner type="success">{success}</Banner>
 
       {formOpen && (
         <div className="card">
@@ -202,15 +218,24 @@ export default function Campos() {
             </div>
 
             <Field label="Anexar mapa do local" hint="Imagem ou PDF do mapa do campo (máx. 8MB).">
-              {editingMapaAtual && !mapaFile && (
+              {editingMapaAtual && !mapaFile && !removerMapa && (
                 <div className="attach-chip" style={{ marginBottom: 8 }}>
                   <a href={arquivoUrl(editingMapaAtual.key)} target="_blank" rel="noreferrer">
                     {editingMapaAtual.nome}
                   </a>
-                  <span>(atual — envie outro arquivo abaixo para substituir)</span>
+                  <button type="button" className="btn-ghost" style={{ color: "#ff8080" }} onClick={() => setRemoverMapa(true)}>
+                    × remover
+                  </button>
                 </div>
               )}
-              <input type="file" accept="image/*,application/pdf" onChange={(e) => setMapaFile(e.target.files?.[0] || null)} />
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => {
+                  setMapaFile(e.target.files?.[0] || null);
+                  setRemoverMapa(false);
+                }}
+              />
             </Field>
 
             <div className="btn-row">
@@ -247,6 +272,7 @@ export default function Campos() {
                   <th>Tamanho</th>
                   <th>Cidade</th>
                   <th>Mapa</th>
+                  <th>Status</th>
                   <th></th>
                 </tr>
               </thead>
@@ -264,6 +290,16 @@ export default function Campos() {
                       ) : (
                         "—"
                       )}
+                    </td>
+                    <td>
+                      <button
+                        className="tag"
+                        style={{ border: "none", cursor: "pointer", color: c.ativo ? "#7be395" : "#ff8080" }}
+                        onClick={() => alternarAtivo(c)}
+                        title="Clique para alternar"
+                      >
+                        {c.ativo ? "Ativo" : "Inativo"}
+                      </button>
                     </td>
                     <td>
                       <button className="link-btn" onClick={() => editar(c)}>

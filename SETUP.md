@@ -83,6 +83,31 @@ Pronto — o sistema está no ar.
 
 ---
 
+## Problemas comuns
+
+**Erro de build citando `/src/main.tsx` não encontrado, ou poucos "modules transformed":**
+Alguma pasta do projeto não subiu completa para o GitHub (comum quando o
+código é enviado pela interface web do GitHub em vez de `git push`, já que
+arrastar muitas pastas aninhadas de uma vez pode deixar algo de fora). Volte
+no repositório e confira se `src/`, `netlify/functions/` (com a subpasta
+`_lib/`), `shared/` e `public/` estão todas completas; reenvie a que faltar
+com **Add file → Upload files**, arrastando a pasta inteira.
+
+**Erro 502 ao tentar logar, com `Cannot find module` no log da função (aba
+Functions do Netlify):**
+As dependências de `netlify/functions/package.json` (como `google-auth-library`)
+não foram instaladas antes do empacotamento das funções. Isso já vem
+resolvido neste projeto — o `build.command` do `netlify.toml` roda
+`npm install --prefix netlify/functions` antes do build — mas se você editou
+esse arquivo ou ele não subiu certinho no upload manual, confirme que a
+linha `command` em `netlify.toml` é exatamente:
+```
+command = "npm install --prefix netlify/functions && npm run build"
+```
+Depois de corrigir, vá em **Deploys → Trigger deploy → Clear cache and deploy site**
+(o "clear cache" garante que ele não reaproveite um empacotamento antigo das
+funções).
+
 ## Notas técnicas
 
 - **Sem banco externo:** todos os dados ficam no Netlify Blobs, dentro do

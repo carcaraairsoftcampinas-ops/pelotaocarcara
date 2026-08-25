@@ -18,6 +18,7 @@ export const MENU: MenuGroup[] = [
     items: [
       { label: "Colaboradores", path: "/cadastros/colaboradores" },
       { label: "Campos", path: "/cadastros/campos" },
+      { label: "Operadores", path: "/cadastros/operadores" },
     ],
   },
   {
@@ -27,6 +28,7 @@ export const MENU: MenuGroup[] = [
       { label: "Nova Missão", path: "/missoes/nova" },
       { label: "Consulta Missões", path: "/missoes/consulta" },
       { label: "Campos disponíveis", path: "/missoes/campos-disponiveis" },
+      { label: "Inventário", path: "/missoes/inventario" },
     ],
   },
   {

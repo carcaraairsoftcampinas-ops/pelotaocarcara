@@ -6,6 +6,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { api, ApiError, arquivoUrl } from "../../lib/api";
 import { useAuth } from "../../lib/AuthContext";
 import { formatBRL, formatDate } from "../../../shared/calc";
+import { STATUS_MISSAO_ORDEM } from "../../../shared/types";
 import type { Campo, Colaborador, Missao } from "../../../shared/types";
 
 export default function ConsultaMissoes() {
@@ -25,6 +26,7 @@ export default function ConsultaMissoes() {
   const [campoId, setCampoId] = useState("");
   const [colaboradorId, setColaboradorId] = useState("");
   const [estrelasMin, setEstrelasMin] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState("");
 
   useEffect(() => {
     api.get<Campo[]>("/campos").then(setCampos).catch(() => {});
@@ -43,6 +45,7 @@ export default function ConsultaMissoes() {
       if (campoId) params.set("campoId", campoId);
       if (colaboradorId) params.set("colaboradorId", colaboradorId);
       if (estrelasMin) params.set("estrelasMin", estrelasMin);
+      if (statusFiltro) params.set("status", statusFiltro);
       const data = await api.get<Missao[]>(`/missoes?${params.toString()}`);
       setMissoes(data);
     } catch (err) {
@@ -81,6 +84,16 @@ export default function ConsultaMissoes() {
               {campos.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.nome}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Status">
+            <select value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)}>
+              <option value="">Todos</option>
+              {STATUS_MISSAO_ORDEM.map((s) => (
+                <option key={s} value={s}>
+                  {s}
                 </option>
               ))}
             </select>
@@ -127,6 +140,7 @@ export default function ConsultaMissoes() {
                   <th>Número</th>
                   <th>Nome</th>
                   <th>Data</th>
+                  <th>Data de criação</th>
                   <th>Campo</th>
                   <th>Colaborador</th>
                   <th>Avaliação</th>
@@ -141,6 +155,7 @@ export default function ConsultaMissoes() {
                     <td>{m.numero || "—"}</td>
                     <td>{m.nome}</td>
                     <td>{formatDate(m.data)}</td>
+                    <td>{m.dataEnvioAnalise ? formatDate(m.dataEnvioAnalise) : "—"}</td>
                     <td>{campoNome(m.campoId)}</td>
                     <td>{m.criadoPorNome}</td>
                     <td>{m.avaliacao ? "★".repeat(m.avaliacao.estrelas) : "—"}</td>
@@ -163,6 +178,18 @@ export default function ConsultaMissoes() {
           <p>
             <strong>Data:</strong> {formatDate(selecionada.data)} &nbsp;·&nbsp; <strong>Campo:</strong>{" "}
             {campoNome(selecionada.campoId)} &nbsp;·&nbsp; <strong>Criado por:</strong> {selecionada.criadoPorNome}
+            {selecionada.dataEnvioAnalise && (
+              <>
+                {" "}
+                &nbsp;·&nbsp; <strong>Data de criação:</strong> {formatDate(selecionada.dataEnvioAnalise)}
+              </>
+            )}
+            {selecionada.quantidadeOperadores != null && (
+              <>
+                {" "}
+                &nbsp;·&nbsp; <strong>Operadores:</strong> {selecionada.quantidadeOperadores}
+              </>
+            )}
           </p>
 
           <h3>Resumo</h3>
@@ -174,9 +201,9 @@ export default function ConsultaMissoes() {
             <>
               <h3 style={{ marginTop: 16 }}>Itens da missão</h3>
               <div className="tag-list">
-                {selecionada.itensNecessarios.map((i, idx) => (
+                {selecionada.itensNecessarios.map((i: any, idx) => (
                   <span className="tag" key={idx}>
-                    {i}
+                    {typeof i === "string" ? i : `${i.nome} (x${i.quantidade})`}
                   </span>
                 ))}
               </div>

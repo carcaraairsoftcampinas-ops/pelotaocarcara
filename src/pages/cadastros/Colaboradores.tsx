@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
 import { api, ApiError } from "../../lib/api";
+import { useActionNotice } from "../../lib/ActionNoticeContext";
 import { PERFIS } from "../../../shared/types";
 import type { Colaborador, Perfil } from "../../../shared/types";
 
@@ -14,6 +15,7 @@ const EMPTY = {
 };
 
 export default function Colaboradores() {
+  const { notify } = useActionNotice();
   const [lista, setLista] = useState<Colaborador[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,10 +77,10 @@ export default function Colaboradores() {
     try {
       if (editingId) {
         await api.put(`/colaboradores`, { id: editingId, ...form });
-        setSuccess("Colaborador atualizado.");
+        notify("Colaborador atualizado com sucesso.");
       } else {
         await api.post(`/colaboradores`, form);
-        setSuccess("Colaborador cadastrado.");
+        notify("Colaborador cadastrado com sucesso.");
       }
       setFormOpen(false);
       await load();
@@ -93,6 +95,7 @@ export default function Colaboradores() {
     if (!confirm(`Excluir o colaborador ${c.nome} ${c.sobrenome}?`)) return;
     try {
       await api.del(`/colaboradores?id=${c.id}`);
+      notify("Colaborador excluído com sucesso.");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao excluir.");

@@ -3,6 +3,7 @@ import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
 import { StatusBadge } from "../../components/StatusBadge";
 import { api, ApiError } from "../../lib/api";
+import { useActionNotice } from "../../lib/ActionNoticeContext";
 import { formatDate } from "../../../shared/calc";
 import type { Campo, Missao } from "../../../shared/types";
 
@@ -19,14 +20,15 @@ function StarPicker({ value, onChange }: { value: number; onChange: (v: number) 
 }
 
 export default function AvaliacaoMissoes() {
+  const { notify } = useActionNotice();
   const [missoes, setMissoes] = useState<Missao[]>([]);
   const [campos, setCampos] = useState<Campo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [selecionada, setSelecionada] = useState<Missao | null>(null);
   const [estrelas, setEstrelas] = useState(0);
   const [comentario, setComentario] = useState("");
+  const [totalOperadoresPresentes, setTotalOperadoresPresentes] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function load() {
@@ -34,7 +36,7 @@ export default function AvaliacaoMissoes() {
     setError(null);
     try {
       const [m, c] = await Promise.all([api.get<Missao[]>("/missoes"), api.get<Campo[]>("/campos")]);
-      setMissoes(m.filter((x) => x.status === "Aprovada" || x.status === "Finalizada"));
+      setMissoes(m.filter((x) => x.status === "Aprovada" || x.status === "Aguardando Avaliação" || x.status === "Finalizada"));
       setCampos(c);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao carregar missões.");
@@ -51,14 +53,18 @@ export default function AvaliacaoMissoes() {
     setSelecionada(m);
     setEstrelas(m.avaliacao?.estrelas || 0);
     setComentario(m.avaliacao?.comentario || "");
+    setTotalOperadoresPresentes(m.avaliacao?.totalOperadoresPresentes ? String(m.avaliacao.totalOperadoresPresentes) : "");
     setError(null);
-    setSuccess(null);
   }
 
   async function avaliar() {
     if (!selecionada) return;
     if (estrelas < 1) {
       setError("Selecione de 1 a 5 estrelas.");
+      return;
+    }
+    if (!totalOperadoresPresentes || Number(totalOperadoresPresentes) < 1) {
+      setError("Informe o total de operadores presentes.");
       return;
     }
     setSaving(true);
@@ -69,9 +75,10 @@ export default function AvaliacaoMissoes() {
         action: "avaliar",
         estrelas,
         comentario,
+        totalOperadoresPresentes: Number(totalOperadoresPresentes),
       });
       setSelecionada(atualizada);
-      setSuccess("Missão avaliada e finalizada.");
+      notify("Missão avaliada e finalizada com sucesso.");
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao avaliar.");
@@ -101,6 +108,7 @@ export default function AvaliacaoMissoes() {
                   <th>Número</th>
                   <th>Nome</th>
                   <th>Data</th>
+                  <th>Data de criação</th>
                   <th>Campo</th>
                   <th>Avaliação</th>
                 </tr>
@@ -114,6 +122,7 @@ export default function AvaliacaoMissoes() {
                     <td>{m.numero || "—"}</td>
                     <td>{m.nome}</td>
                     <td>{formatDate(m.data)}</td>
+                    <td>{m.dataEnvioAnalise ? formatDate(m.dataEnvioAnalise) : "—"}</td>
                     <td>{campoNome(m.campoId)}</td>
                     <td>{m.avaliacao ? "★".repeat(m.avaliacao.estrelas) : "Pendente"}</td>
                   </tr>
@@ -132,7 +141,6 @@ export default function AvaliacaoMissoes() {
             </h2>
             <StatusBadge status={selecionada.status} />
           </div>
-          <Banner type="success">{success}</Banner>
 
           {selecionada.status === "Finalizada" && selecionada.avaliacao ? (
             <>
@@ -142,6 +150,9 @@ export default function AvaliacaoMissoes() {
               </p>
               <div className="readonly-block">{selecionada.avaliacao.comentario}</div>
               <p className="hint">
+                Total de operadores presentes: {selecionada.avaliacao.totalOperadoresPresentes ?? "—"}
+              </p>
+              <p className="hint">
                 Avaliado por {selecionada.avaliacao.avaliadoPor} em {formatDate(selecionada.avaliacao.avaliadoEm)}
               </p>
             </>
@@ -149,6 +160,14 @@ export default function AvaliacaoMissoes() {
             <>
               <Field label="Avaliação (1 a 5 estrelas)" required>
                 <StarPicker value={estrelas} onChange={setEstrelas} />
+              </Field>
+              <Field label="Total de operadores presentes" required>
+                <input
+                  type="number"
+                  min={1}
+                  value={totalOperadoresPresentes}
+                  onChange={(e) => setTotalOperadoresPresentes(e.target.value)}
+                />
               </Field>
               <Field label="Comentários" hint="Como foi a missão, o que pode melhorar da próxima vez.">
                 <textarea value={comentario} onChange={(e) => setComentario(e.target.value)} rows={4} />

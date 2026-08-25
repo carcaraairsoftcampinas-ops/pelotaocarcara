@@ -3,10 +3,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
-import { api, ApiError, arquivoUrl, fileToBase64 } from "../../lib/api";
+import { api, ApiError, arquivoUrl, uploadArquivo } from "../../lib/api";
+import { useActionNotice } from "../../lib/ActionNoticeContext";
 import { StatusBadge } from "../../components/StatusBadge";
 import { totalItensCompra, formatBRL } from "../../../shared/calc";
-import type { Campo, ItemCompra, Missao } from "../../../shared/types";
+import type { Campo, ItemCompra, ItemNecessario, Missao } from "../../../shared/types";
 
 const RESUMO_EXEMPLO =
   "Serviços de inteligência internacionais identificaram que o cartel fictício \"Sombra Vermelha\" está por trás do crime organizado na região, comandado pelo líder conhecido apenas como \"El Cuervo\". Após meses de investigação, uma força-tarefa internacional foi montada para invadir o território controlado pela organização, capturar o líder e desativar os principais laboratórios de drogas e arsenais de armas identificados pela inteligência.";
@@ -19,37 +20,44 @@ interface Anexo {
   nomeArquivo: string;
 }
 
+function hojeISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function NovaMissao() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { notify } = useActionNotice();
 
   const [campos, setCampos] = useState<Campo[]>([]);
   const [loading, setLoading] = useState(!!id);
   const [saving, setSaving] = useState<"save" | "submit" | null>(null);
+  const [uploadingLabel, setUploadingLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const [numero, setNumero] = useState<string | null>(null);
   const [status, setStatus] = useState<Missao["status"]>("Rascunho");
   const [nome, setNome] = useState("");
-  const [data, setData] = useState("");
+  const [data, setData] = useState(hojeISO());
   const [campoId, setCampoId] = useState("");
   const [resumo, setResumo] = useState("");
   const [objetivos, setObjetivos] = useState("");
-  const [itensNecessarios, setItensNecessarios] = useState<string[]>([]);
-  const [novoItem, setNovoItem] = useState("");
+  const [quantidadeOperadores, setQuantidadeOperadores] = useState("");
+  const [itensNecessarios, setItensNecessarios] = useState<ItemNecessario[]>([]);
+  const [novoItemNome, setNovoItemNome] = useState("");
+  const [novoItemQtd, setNovoItemQtd] = useState("1");
   const [itensCompra, setItensCompra] = useState<ItemCompra[]>([]);
   const [cartasExistentes, setCartasExistentes] = useState<Anexo[]>([]);
   const [imagensExistentes, setImagensExistentes] = useState<Anexo[]>([]);
-  const [novasCartas, setNovasCartas] = useState<File[]>([]);
-  const [novasImagens, setNovasImagens] = useState<File[]>([]);
+  const [novasCartas, setNovasCartas] = useState<Anexo[]>([]);
+  const [novasImagens, setNovasImagens] = useState<Anexo[]>([]);
   const [removerCartas, setRemoverCartas] = useState<string[]>([]);
   const [removerImagens, setRemoverImagens] = useState<string[]>([]);
 
   const editavel = !id || status === "Rascunho" || status === "Pendência";
 
   useEffect(() => {
-    api.get<Campo[]>("/campos").then(setCampos).catch(() => {});
+    api.get<Campo[]>("/campos?apenasAtivos=1").then(setCampos).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -65,6 +73,7 @@ export default function NovaMissao() {
         setCampoId(m.campoId);
         setResumo(m.resumo);
         setObjetivos(m.objetivos);
+        setQuantidadeOperadores(m.quantidadeOperadores != null ? String(m.quantidadeOperadores) : "");
         setItensNecessarios(m.itensNecessarios);
         setItensCompra(m.itensCompra);
         setCartasExistentes(m.cartas);
@@ -78,9 +87,13 @@ export default function NovaMissao() {
   }, [id]);
 
   function addItemNecessario() {
-    if (!novoItem.trim()) return;
-    setItensNecessarios((prev) => [...prev, novoItem.trim()]);
-    setNovoItem("");
+    if (!novoItemNome.trim()) return;
+    setItensNecessarios((prev) => [
+      ...prev,
+      { nome: novoItemNome.trim(), quantidade: Math.max(1, Number(novoItemQtd) || 1) },
+    ]);
+    setNovoItemNome("");
+    setNovoItemQtd("1");
   }
 
   function addItemCompra() {
@@ -91,30 +104,43 @@ export default function NovaMissao() {
     setItensCompra((prev) => prev.map((i) => (i.id === itemId ? { ...i, ...patch } : i)));
   }
 
+  async function selecionarArquivos(
+    files: FileList | null,
+    label: string,
+    setDestino: React.Dispatch<React.SetStateAction<Anexo[]>>
+  ) {
+    if (!files || files.length === 0) return;
+    setUploadingLabel(label);
+    setError(null);
+    try {
+      for (const file of Array.from(files)) {
+        const up = await uploadArquivo(file);
+        setDestino((prev) => [...prev, up]);
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : `Erro ao enviar arquivo (${label}).`);
+    } finally {
+      setUploadingLabel(null);
+    }
+  }
+
   const totalCompra = totalItensCompra(itensCompra);
 
   async function salvar(action: "save" | "submit") {
     setSaving(action);
     setError(null);
-    setSuccess(null);
     try {
-      const novasCartasB64 = await Promise.all(
-        novasCartas.map(async (f) => ({ base64: await fileToBase64(f), nomeArquivo: f.name, contentType: f.type }))
-      );
-      const novasImagensB64 = await Promise.all(
-        novasImagens.map(async (f) => ({ base64: await fileToBase64(f), nomeArquivo: f.name, contentType: f.type }))
-      );
-
       const payload = {
         nome,
         data,
         campoId,
         resumo,
         objetivos,
+        quantidadeOperadores: quantidadeOperadores ? Number(quantidadeOperadores) : null,
         itensNecessarios,
         itensCompra,
-        novasCartas: novasCartasB64,
-        novasImagens: novasImagensB64,
+        novasCartas,
+        novasImagens,
         removerCartasKeys: removerCartas,
         removerImagensKeys: removerImagens,
         action,
@@ -127,8 +153,12 @@ export default function NovaMissao() {
         saved = await api.post<Missao>("/missoes", payload);
       }
 
-      setSuccess(action === "submit" ? `Missão enviada para análise (nº ${saved.numero}).` : "Rascunho salvo.");
-      setTimeout(() => navigate(`/missoes/nova/${saved.id}`, { replace: true }), 600);
+      notify(
+        action === "submit"
+          ? `Missão enviada para análise com sucesso (nº ${saved.numero}).`
+          : "Rascunho salvo com sucesso."
+      );
+      navigate(`/missoes/nova/${saved.id}`, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao salvar missão.");
     } finally {
@@ -142,7 +172,6 @@ export default function NovaMissao() {
     <div>
       <PageHeader crumbs="Missões" title={id ? "Editar Missão" : "Nova Missão"} />
       <Banner type="error">{error}</Banner>
-      <Banner type="success">{success}</Banner>
 
       {numero && (
         <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -165,11 +194,11 @@ export default function NovaMissao() {
             <Field label="Nome da Missão" required>
               <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} required />
             </Field>
-            <Field label="Data da Missão" required>
+            <Field label="Data da Missão" required hint="Não pode coincidir com outra missão já Aprovada.">
               <input type="date" value={data} onChange={(e) => setData(e.target.value)} required />
             </Field>
           </div>
-          <Field label="Campo da missão" required>
+          <Field label="Campo da missão" required hint="Só aparecem campos Ativos (Cadastros → Campos).">
             <select value={campoId} onChange={(e) => setCampoId(e.target.value)} required>
               <option value="">Selecione…</option>
               {campos.map((c) => (
@@ -178,6 +207,14 @@ export default function NovaMissao() {
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Quantidade de operadores" required hint="Obrigatório para enviar para análise.">
+            <input
+              type="number"
+              min={1}
+              value={quantidadeOperadores}
+              onChange={(e) => setQuantidadeOperadores(e.target.value)}
+            />
           </Field>
           <Field label="Resumo Missão" required>
             <textarea
@@ -203,39 +240,58 @@ export default function NovaMissao() {
 
         <div className="card">
           <h2>Itens da missão</h2>
-          <p>Liste todos os itens necessários para a missão. Obrigatório para enviar para análise.</p>
+          <p>Liste todos os itens necessários e a quantidade de cada um. Obrigatório para enviar para análise.</p>
           <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
             <input
               type="text"
-              value={novoItem}
-              onChange={(e) => setNovoItem(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addItemNecessario();
-                }
-              }}
+              value={novoItemNome}
+              onChange={(e) => setNovoItemNome(e.target.value)}
               placeholder="Ex: Rádio comunicador"
+              style={{ flex: 1 }}
+            />
+            <input
+              type="number"
+              min={1}
+              value={novoItemQtd}
+              onChange={(e) => setNovoItemQtd(e.target.value)}
+              style={{ width: 90 }}
+              title="Quantidade"
             />
             <button type="button" className="btn btn-secondary" onClick={addItemNecessario}>
               + Adicionar
             </button>
           </div>
-          <div className="tag-list">
-            {itensNecessarios.map((item, idx) => (
-              <span className="tag" key={`${item}-${idx}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                {item}
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  style={{ padding: 0, color: "#ff8080" }}
-                  onClick={() => setItensNecessarios((prev) => prev.filter((_, i) => i !== idx))}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
+          {itensNecessarios.length > 0 && (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Quantidade</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itensNecessarios.map((item, idx) => (
+                    <tr key={`${item.nome}-${idx}`}>
+                      <td>{item.nome}</td>
+                      <td>{item.quantidade}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          style={{ color: "#ff8080" }}
+                          onClick={() => setItensNecessarios((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          Remover
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div className="card">
@@ -290,6 +346,7 @@ export default function NovaMissao() {
 
         <div className="card">
           <h2>Anexos</h2>
+          {uploadingLabel && <div className="hint">Enviando {uploadingLabel}…</div>}
           <Field label="Cartas da Missão" required hint="Obrigatório para enviar para análise.">
             <div className="attach-list">
               {cartasExistentes
@@ -309,14 +366,14 @@ export default function NovaMissao() {
                     </button>
                   </span>
                 ))}
-              {novasCartas.map((f, idx) => (
-                <span className="attach-chip" key={`${f.name}-${idx}`}>
-                  {f.name}
+              {novasCartas.map((f) => (
+                <span className="attach-chip" key={f.blobKey}>
+                  {f.nomeArquivo}
                   <button
                     type="button"
                     className="btn-ghost"
                     style={{ color: "#ff8080" }}
-                    onClick={() => setNovasCartas((prev) => prev.filter((_, i) => i !== idx))}
+                    onClick={() => setNovasCartas((prev) => prev.filter((x) => x.blobKey !== f.blobKey))}
                   >
                     ×
                   </button>
@@ -327,7 +384,7 @@ export default function NovaMissao() {
               type="file"
               multiple
               accept="image/*,application/pdf"
-              onChange={(e) => setNovasCartas((prev) => [...prev, ...Array.from(e.target.files || [])])}
+              onChange={(e) => selecionarArquivos(e.target.files, "carta", setNovasCartas)}
             />
           </Field>
 
@@ -350,14 +407,14 @@ export default function NovaMissao() {
                     </button>
                   </span>
                 ))}
-              {novasImagens.map((f, idx) => (
-                <span className="attach-chip" key={`${f.name}-${idx}`}>
-                  {f.name}
+              {novasImagens.map((f) => (
+                <span className="attach-chip" key={f.blobKey}>
+                  {f.nomeArquivo}
                   <button
                     type="button"
                     className="btn-ghost"
                     style={{ color: "#ff8080" }}
-                    onClick={() => setNovasImagens((prev) => prev.filter((_, i) => i !== idx))}
+                    onClick={() => setNovasImagens((prev) => prev.filter((x) => x.blobKey !== f.blobKey))}
                   >
                     ×
                   </button>
@@ -368,16 +425,20 @@ export default function NovaMissao() {
               type="file"
               multiple
               accept="image/*"
-              onChange={(e) => setNovasImagens((prev) => [...prev, ...Array.from(e.target.files || [])])}
+              onChange={(e) => selecionarArquivos(e.target.files, "imagem", setNovasImagens)}
             />
           </Field>
         </div>
 
         <div className="btn-row">
-          <button className="btn btn-secondary" disabled={!!saving} onClick={() => salvar("save")}>
+          <button className="btn btn-secondary" disabled={!!saving || !!uploadingLabel} onClick={() => salvar("save")}>
             {saving === "save" ? "Salvando…" : "Salvar como Rascunho"}
           </button>
-          <button className="btn btn-primary" disabled={!!saving} onClick={() => salvar("submit")}>
+          <button
+            className="btn btn-primary"
+            disabled={!!saving || !!uploadingLabel}
+            onClick={() => salvar("submit")}
+          >
             {saving === "submit" ? "Enviando…" : "Enviar para Análise"}
           </button>
         </div>

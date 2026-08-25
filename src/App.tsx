@@ -8,9 +8,11 @@ import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Colaboradores from "./pages/cadastros/Colaboradores";
 import Campos from "./pages/cadastros/Campos";
+import Operadores from "./pages/cadastros/Operadores";
 import NovaMissao from "./pages/missoes/NovaMissao";
 import ConsultaMissoes from "./pages/missoes/ConsultaMissoes";
 import CamposDisponiveis from "./pages/missoes/CamposDisponiveis";
+import Inventario from "./pages/missoes/Inventario";
 import AnaliseMissoes from "./pages/analise/AnaliseMissoes";
 import AvaliacaoMissoes from "./pages/analise/AvaliacaoMissoes";
 import LancamentoFinanceiro from "./pages/financeiro/LancamentoFinanceiro";
@@ -52,6 +54,10 @@ export default function App() {
         element={<Protected perfis={["Administrador"]}>{<Colaboradores />}</Protected>}
       />
       <Route path="/cadastros/campos" element={<Protected perfis={["Administrador"]}>{<Campos />}</Protected>} />
+      <Route
+        path="/cadastros/operadores"
+        element={<Protected perfis={["Administrador"]}>{<Operadores />}</Protected>}
+      />
 
       <Route
         path="/missoes/nova"
@@ -75,6 +81,12 @@ export default function App() {
         path="/missoes/campos-disponiveis"
         element={
           <Protected perfis={["Administrador", "Coordenador", "Colaborador"]}>{<CamposDisponiveis />}</Protected>
+        }
+      />
+      <Route
+        path="/missoes/inventario"
+        element={
+          <Protected perfis={["Administrador", "Coordenador", "Colaborador"]}>{<Inventario />}</Protected>
         }
       />
 

@@ -44,6 +44,17 @@ export function arquivoUrl(key: string): string {
   return `${BASE}/arquivo?key=${encodeURIComponent(key)}`;
 }
 
+// Envia UM arquivo por vez pro servidor (evita payload grande demais quando
+// há vários anexos) e devolve a referência (blobKey) pra guardar no registro.
+export async function uploadArquivo(file: File): Promise<{ blobKey: string; nomeArquivo: string }> {
+  const base64 = await fileToBase64(file);
+  return api.post<{ blobKey: string; nomeArquivo: string }>("/arquivo", {
+    base64,
+    nomeArquivo: file.name,
+    contentType: file.type,
+  });
+}
+
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
