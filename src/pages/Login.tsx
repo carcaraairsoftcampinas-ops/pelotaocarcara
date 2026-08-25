@@ -9,6 +9,7 @@ export default function Login() {
   const buttonRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const sessaoExpirada = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("expirada") === "1";
 
   useEffect(() => {
     if (user || loading) return;
@@ -67,6 +68,11 @@ export default function Login() {
         <img src="/logo-carcara.jpg" alt="Carcará Airsoft Team" style={{ borderRadius: 12 }} />
         <h1>Sistema de Missões</h1>
         <p>Entre com sua conta Google cadastrada pelo time para acessar o sistema.</p>
+        {sessaoExpirada && !error && (
+          <div className="banner banner-error" style={{ textAlign: "left" }}>
+            Sua sessão expirou. Faça login novamente.
+          </div>
+        )}
         <div ref={buttonRef} style={{ display: "flex", justifyContent: "center", minHeight: 44 }} />
         {!ready && !error && <div className="spinner" style={{ marginTop: 10 }} />}
         {error && <div className="banner banner-error" style={{ marginTop: 16, textAlign: "left" }}>{error}</div>}

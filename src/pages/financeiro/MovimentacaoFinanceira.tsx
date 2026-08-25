@@ -304,6 +304,7 @@ export default function MovimentacaoFinanceira() {
                     <th>Colaborador</th>
                     <th>Qtde Operadores</th>
                     <th>Operadores Presentes</th>
+                    <th>Fechamento</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -318,6 +319,7 @@ export default function MovimentacaoFinanceira() {
                       <td>{r.colaboradorNome}</td>
                       <td>{r.quantidadeOperadores ?? "—"}</td>
                       <td>{r.operadoresPresentes ?? "—"}</td>
+                      <td>{formatBRL(r.fechamento)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -365,7 +367,9 @@ export default function MovimentacaoFinanceira() {
               formMissao && (
                 <p>
                   <strong>Data da missão:</strong> {formatDate(formMissao.data)} &nbsp;·&nbsp;{" "}
-                  <strong>Criado por:</strong> {formMissao.criadoPorNome}
+                  <strong>Criado por:</strong> {formMissao.criadoPorNome} &nbsp;·&nbsp;{" "}
+                  <strong>Qtde Operadores:</strong> {formMissao.quantidadeOperadores ?? "—"} &nbsp;·&nbsp;{" "}
+                  <strong>Operadores Presentes:</strong> {formMissao.avaliacao?.totalOperadoresPresentes ?? "—"}
                 </p>
               )
             )}

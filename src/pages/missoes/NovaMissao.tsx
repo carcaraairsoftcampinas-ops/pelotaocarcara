@@ -126,7 +126,30 @@ export default function NovaMissao() {
 
   const totalCompra = totalItensCompra(itensCompra);
 
+  function camposFaltando(): string[] {
+    const faltando: string[] = [];
+    if (!nome.trim()) faltando.push("Nome da Missão");
+    if (!data) faltando.push("Data da Missão");
+    if (!campoId) faltando.push("Campo da missão");
+    if (!resumo.trim()) faltando.push("Resumo Missão");
+    if (!objetivos.trim()) faltando.push("Objetivos da missão");
+    const cartasTotal = cartasExistentes.filter((c) => !removerCartas.includes(c.blobKey)).length + novasCartas.length;
+    if (cartasTotal === 0) faltando.push("Cartas da Missão (anexo)");
+    const imagensTotal = imagensExistentes.filter((c) => !removerImagens.includes(c.blobKey)).length + novasImagens.length;
+    if (imagensTotal === 0) faltando.push("Imagens (anexo)");
+    if (!quantidadeOperadores || Number(quantidadeOperadores) < 1) faltando.push("Quantidade de operadores");
+    if (itensNecessarios.filter((i) => i.nome?.trim()).length === 0) faltando.push("Itens da missão");
+    return faltando;
+  }
+
   async function salvar(action: "save" | "submit") {
+    if (action === "submit") {
+      const faltando = camposFaltando();
+      if (faltando.length > 0) {
+        notify(`Preencha os campos obrigatórios antes de enviar para análise:\n\n${faltando.map((f) => `• ${f}`).join("\n")}`);
+        return;
+      }
+    }
     setSaving(action);
     setError(null);
     try {

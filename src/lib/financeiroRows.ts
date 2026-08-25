@@ -5,6 +5,7 @@
 // não tem lançamento): Aprovada -> "Em Andamento" (amarelo), Finalizada ->
 // "Financeiro Pendente" (vermelho). Quando já existe lançamento, usa o
 // status real dele.
+import { resultadoLancamento } from "../../shared/calc";
 import type { LancamentoFinanceiro, Missao, StatusFinanceiro } from "../../shared/types";
 
 export interface MovimentacaoRow {
@@ -19,6 +20,7 @@ export interface MovimentacaoRow {
   investimentoPrevisto: number; // só usado quando lancamentoId é null (soma dos itensCompra da missão)
   quantidadeOperadores: number | null; // planejado, preenchido em Nova Missão — só pra origem "missao"
   operadoresPresentes: number | null; // real, preenchido em Avaliação de Missões — só pra origem "missao"
+  fechamento: number; // saldo atual da linha: créditos - despesas do lançamento (ou -investimentoPrevisto se ainda não há lançamento)
 }
 
 export function buildMovimentacaoRows(missoes: Missao[], lancamentos: LancamentoFinanceiro[]): MovimentacaoRow[] {
@@ -43,15 +45,18 @@ export function buildMovimentacaoRows(missoes: Missao[], lancamentos: Lancamento
         status: lanc.status,
         lancamentoId: lanc.id,
         investimentoPrevisto: 0,
+        fechamento: resultadoLancamento(lanc),
       });
     } else {
+      const investimentoPrevisto = m.investimentoTotal || 0;
       rows.push({
         key: `missao-${m.id}`,
         origem: "missao",
         ...base,
         status: m.status === "Aprovada" ? "Em Andamento" : "Financeiro Pendente",
         lancamentoId: null,
-        investimentoPrevisto: m.investimentoTotal || 0,
+        investimentoPrevisto,
+        fechamento: -investimentoPrevisto,
       });
     }
   }
@@ -70,6 +75,7 @@ export function buildMovimentacaoRows(missoes: Missao[], lancamentos: Lancamento
       investimentoPrevisto: 0,
       quantidadeOperadores: null,
       operadoresPresentes: null,
+      fechamento: resultadoLancamento(l),
     });
   }
 

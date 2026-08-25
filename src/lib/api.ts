@@ -8,6 +8,11 @@ export class ApiError extends Error {
   }
 }
 
+// Evita disparar mais de um redirecionamento quando várias chamadas em
+// paralelo recebem 401 ao mesmo tempo (ex.: a tela carrega missões e
+// financeiro juntos e a sessão expirou entre uma chamada e outra).
+let redirecionandoPorSessaoExpirada = false;
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
@@ -28,6 +33,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
+    // "/auth-me" devolve 401 normalmente quando ainda não há login (fluxo
+    // esperado, tratado pelo AuthContext) — não deve disparar redirecionamento.
+    // Para qualquer outro endpoint, 401 significa que a sessão expirou ou
+    // ficou inválida no meio do uso: em vez de deixar a tela com dados
+    // antigos/sumidos e um aviso discreto, manda direto pro login.
+    if (res.status === 401 && path !== "/auth-me" && !redirecionandoPorSessaoExpirada) {
+      redirecionandoPorSessaoExpirada = true;
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.location.href = "/login?expirada=1";
+      }
+    }
     throw new ApiError(res.status, data?.error || `Erro ${res.status}`);
   }
   return data as T;
