@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { json, readJson, handleErrors, HttpError } from "./_lib/http";
 import { requireUser, requirePerfil } from "./_lib/session";
-import { listAll, getById, upsert, remove, store, base64ToArrayBuffer, STORES } from "./_lib/store";
+import { listAll, getById, upsert, remove, store, STORES } from "./_lib/store";
 import type { Campo, EnderecoCampo } from "../../shared/types";
 
 interface CampoInput {
@@ -11,9 +11,11 @@ interface CampoInput {
   endereco?: Partial<EnderecoCampo>;
   localizacaoGoogle?: string;
   localizacaoGps?: string;
-  mapaBase64?: string | null;
+  // Mapa já enviado antes via POST /arquivo — aqui só chega a referência.
+  mapaBlobKey?: string | null;
   mapaNomeArquivo?: string | null;
-  mapaContentType?: string | null;
+  removerMapa?: boolean;
+  ativo?: boolean;
 }
 
 function validarEndereco(e?: Partial<EnderecoCampo>): EnderecoCampo {
@@ -29,23 +31,6 @@ function validarEndereco(e?: Partial<EnderecoCampo>): EnderecoCampo {
   };
 }
 
-async function salvarMapa(input: CampoInput): Promise<{ mapaBlobKey: string; mapaNomeArquivo: string } | null> {
-  if (!input.mapaBase64) return null;
-  const bytes = base64ToArrayBuffer(input.mapaBase64);
-  if (bytes.byteLength > 8 * 1024 * 1024) {
-    throw new HttpError(400, "O arquivo do mapa deve ter no máximo 8MB.");
-  }
-  const key = uuidv4();
-  const s = store(STORES.arquivos);
-  await s.set(key, bytes, {
-    metadata: {
-      filename: input.mapaNomeArquivo || "mapa",
-      contentType: input.mapaContentType || "application/octet-stream",
-    },
-  });
-  return { mapaBlobKey: key, mapaNomeArquivo: input.mapaNomeArquivo || "mapa" };
-}
-
 export default async (req: Request): Promise<Response> => {
   return handleErrors(async () => {
     const user = requireUser(req);
@@ -58,7 +43,10 @@ export default async (req: Request): Promise<Response> => {
         if (!c) throw new HttpError(404, "Campo não encontrado.");
         return json(200, c);
       }
-      const all = await listAll<Campo>(STORES.campos);
+      let all = await listAll<Campo>(STORES.campos);
+      if (url.searchParams.get("apenasAtivos") === "1") {
+        all = all.filter((c) => c.ativo);
+      }
       all.sort((a, b) => a.nome.localeCompare(b.nome));
       return json(200, all);
     }
@@ -70,7 +58,6 @@ export default async (req: Request): Promise<Response> => {
       const input = await readJson<CampoInput>(req);
       if (!input.nome?.trim()) throw new HttpError(400, "Nome do campo é obrigatório.");
       const endereco = validarEndereco(input.endereco);
-      const mapa = await salvarMapa(input);
       const now = new Date().toISOString();
       const record: Campo = {
         id: uuidv4(),
@@ -79,8 +66,9 @@ export default async (req: Request): Promise<Response> => {
         endereco,
         localizacaoGoogle: input.localizacaoGoogle?.trim() || "",
         localizacaoGps: input.localizacaoGps?.trim() || "",
-        mapaBlobKey: mapa?.mapaBlobKey ?? null,
-        mapaNomeArquivo: mapa?.mapaNomeArquivo ?? null,
+        mapaBlobKey: input.mapaBlobKey ?? null,
+        mapaNomeArquivo: input.mapaNomeArquivo ?? null,
+        ativo: input.ativo ?? true,
         createdAt: now,
         updatedAt: now,
       };
@@ -93,12 +81,21 @@ export default async (req: Request): Promise<Response> => {
       if (!input.id) throw new HttpError(400, "id é obrigatório.");
       const existing = await getById<Campo>(STORES.campos, input.id);
       if (!existing) throw new HttpError(404, "Campo não encontrado.");
+
+      // Alternar só o status ativo/inativo (sem reenviar o formulário todo).
+      if (typeof input.ativo === "boolean" && Object.keys(input).length <= 3) {
+        const updated: Campo = { ...existing, ativo: input.ativo, updatedAt: new Date().toISOString() };
+        await upsert(STORES.campos, updated);
+        return json(200, updated);
+      }
+
       if (!input.nome?.trim()) throw new HttpError(400, "Nome do campo é obrigatório.");
       const endereco = validarEndereco(input.endereco);
-      const novoMapa = await salvarMapa(input);
-      if (novoMapa && existing.mapaBlobKey) {
+
+      if ((input.removerMapa || input.mapaBlobKey) && existing.mapaBlobKey && existing.mapaBlobKey !== input.mapaBlobKey) {
         await store(STORES.arquivos).delete(existing.mapaBlobKey).catch(() => {});
       }
+
       const updated: Campo = {
         ...existing,
         nome: input.nome.trim(),
@@ -106,8 +103,9 @@ export default async (req: Request): Promise<Response> => {
         endereco,
         localizacaoGoogle: input.localizacaoGoogle?.trim() || "",
         localizacaoGps: input.localizacaoGps?.trim() || "",
-        mapaBlobKey: novoMapa?.mapaBlobKey ?? existing.mapaBlobKey,
-        mapaNomeArquivo: novoMapa?.mapaNomeArquivo ?? existing.mapaNomeArquivo,
+        mapaBlobKey: input.removerMapa ? null : (input.mapaBlobKey ?? existing.mapaBlobKey),
+        mapaNomeArquivo: input.removerMapa ? null : (input.mapaNomeArquivo ?? existing.mapaNomeArquivo),
+        ativo: input.ativo ?? existing.ativo,
         updatedAt: new Date().toISOString(),
       };
       await upsert(STORES.campos, updated);

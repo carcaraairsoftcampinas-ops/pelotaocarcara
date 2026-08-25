@@ -1,14 +1,13 @@
 import { v4 as uuidv4 } from "uuid";
 import { json, readJson, handleErrors, HttpError } from "./_lib/http";
 import { requireUser, requirePerfil } from "./_lib/session";
-import { listAll, getById, upsert, remove, store, nextMissionNumber, base64ToArrayBuffer, STORES } from "./_lib/store";
+import { listAll, getById, upsert, remove, store, nextMissionNumber, STORES } from "./_lib/store";
 import { totalItensCompra } from "../../shared/calc";
-import type { Missao, ItemCompra, SessionUser } from "../../shared/types";
+import type { Missao, ItemCompra, ItemNecessario, SessionUser } from "../../shared/types";
 
-interface AnexoInput {
-  base64: string;
+interface AnexoRef {
+  blobKey: string;
   nomeArquivo: string;
-  contentType: string;
 }
 
 interface MissaoInput {
@@ -18,10 +17,11 @@ interface MissaoInput {
   campoId?: string;
   resumo?: string;
   objetivos?: string;
-  itensNecessarios?: string[];
+  quantidadeOperadores?: number | null;
+  itensNecessarios?: ItemNecessario[];
   itensCompra?: ItemCompra[];
-  novasCartas?: AnexoInput[];
-  novasImagens?: AnexoInput[];
+  novasCartas?: AnexoRef[]; // já enviadas via POST /arquivo antes deste request
+  novasImagens?: AnexoRef[]; // idem
   removerCartasKeys?: string[];
   removerImagensKeys?: string[];
   action?: "save" | "submit";
@@ -45,25 +45,48 @@ function validarEnvio(input: MissaoInput, cartasTotal: number, imagensTotal: num
   validarRascunho(input);
   if (cartasTotal === 0) throw new HttpError(400, "Anexe ao menos uma Carta da Missão para enviar para análise.");
   if (imagensTotal === 0) throw new HttpError(400, "Anexe ao menos uma Imagem para enviar para análise.");
-  if (!input.itensNecessarios || input.itensNecessarios.filter((i) => i.trim()).length === 0) {
+  if (!input.quantidadeOperadores || input.quantidadeOperadores < 1) {
+    throw new HttpError(400, "Informe a quantidade de operadores para enviar para análise.");
+  }
+  if (!input.itensNecessarios || input.itensNecessarios.filter((i) => i.nome?.trim()).length === 0) {
     throw new HttpError(400, "Informe os itens necessários para a missão para enviar para análise.");
   }
 }
 
-async function salvarAnexos(anexos: AnexoInput[] | undefined): Promise<{ blobKey: string; nomeArquivo: string }[]> {
-  if (!anexos || anexos.length === 0) return [];
-  const s = store(STORES.arquivos);
-  const results: { blobKey: string; nomeArquivo: string }[] = [];
-  for (const a of anexos) {
-    const bytes = base64ToArrayBuffer(a.base64);
-    if (bytes.byteLength > 8 * 1024 * 1024) {
-      throw new HttpError(400, `O arquivo "${a.nomeArquivo}" deve ter no máximo 8MB.`);
-    }
-    const key = uuidv4();
-    await s.set(key, bytes, { metadata: { filename: a.nomeArquivo, contentType: a.contentType } });
-    results.push({ blobKey: key, nomeArquivo: a.nomeArquivo });
-  }
-  return results;
+function limparItensNecessarios(itens: ItemNecessario[] | undefined): ItemNecessario[] {
+  return (itens || [])
+    .filter((i) => i.nome?.trim())
+    .map((i) => ({ nome: i.nome.trim(), quantidade: Math.max(1, Number(i.quantidade) || 1) }));
+}
+
+// Data local (YYYY-MM-DD) do servidor, pra comparar com o campo `data` da
+// missão (também YYYY-MM-DD, vindo de um <input type="date">).
+function hojeISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Missão "Aprovada" cuja data já passou vira "Aguardando Avaliação" sozinha,
+// sem precisar de nenhum agendamento — a checagem roda toda vez que a lista
+// (ou uma missão) é lida. Só grava de volta quando realmente muda algo.
+async function aplicarTransicaoAutomatica(m: Missao): Promise<Missao> {
+  if (m.status !== "Aprovada" || !m.data || m.data >= hojeISO()) return m;
+  const now = new Date().toISOString();
+  const atualizada: Missao = {
+    ...m,
+    status: "Aguardando Avaliação",
+    updatedAt: now,
+    historicoStatus: [
+      ...m.historicoStatus,
+      {
+        status: "Aguardando Avaliação",
+        data: now,
+        colaboradorId: "sistema",
+        colaboradorNome: "Sistema (automático)",
+      },
+    ],
+  };
+  await upsert(STORES.missoes, atualizada);
+  return atualizada;
 }
 
 export default async (req: Request): Promise<Response> => {
@@ -79,24 +102,29 @@ export default async (req: Request): Promise<Response> => {
         if (!podeVerTudo(user) && m.criadoPorId !== user.colaboradorId) {
           throw new HttpError(403, "Você só pode visualizar as missões que criou.");
         }
-        return json(200, m);
+        return json(200, await aplicarTransicaoAutomatica(m));
       }
 
       let all = await listAll<Missao>(STORES.missoes);
       if (!podeVerTudo(user)) {
         all = all.filter((m) => m.criadoPorId === user.colaboradorId);
       }
+      all = await Promise.all(all.map((m) => aplicarTransicaoAutomatica(m)));
 
       const dataInicio = url.searchParams.get("dataInicio");
       const dataFim = url.searchParams.get("dataFim");
       const campoId = url.searchParams.get("campoId");
       const colaboradorId = url.searchParams.get("colaboradorId");
       const estrelasMin = url.searchParams.get("estrelasMin");
+      const status = url.searchParams.get("status");
+      const numero = url.searchParams.get("numero");
 
       if (dataInicio) all = all.filter((m) => m.data >= dataInicio);
       if (dataFim) all = all.filter((m) => m.data <= dataFim);
       if (campoId) all = all.filter((m) => m.campoId === campoId);
       if (colaboradorId) all = all.filter((m) => m.criadoPorId === colaboradorId);
+      if (status) all = all.filter((m) => m.status === status);
+      if (numero) all = all.filter((m) => (m.numero || "").toLowerCase().includes(numero.toLowerCase()));
       if (estrelasMin && podeVerTudo(user)) {
         const min = Number(estrelasMin);
         all = all.filter((m) => (m.avaliacao?.estrelas ?? 0) >= min);
@@ -111,8 +139,8 @@ export default async (req: Request): Promise<Response> => {
       const input = await readJson<MissaoInput>(req);
       validarRascunho(input);
       const now = new Date().toISOString();
-      const cartas = await salvarAnexos(input.novasCartas);
-      const imagens = await salvarAnexos(input.novasImagens);
+      const cartas = input.novasCartas || [];
+      const imagens = input.novasImagens || [];
       const itensCompra = (input.itensCompra || []).map((i) => ({ ...i, id: i.id || uuidv4() }));
 
       const record: Missao = {
@@ -125,7 +153,8 @@ export default async (req: Request): Promise<Response> => {
         objetivos: input.objetivos!.trim(),
         cartas,
         imagens,
-        itensNecessarios: (input.itensNecessarios || []).map((i) => i.trim()).filter(Boolean),
+        quantidadeOperadores: input.quantidadeOperadores ?? null,
+        itensNecessarios: limparItensNecessarios(input.itensNecessarios),
         itensCompra,
         investimentoTotal: totalItensCompra(itensCompra),
         status: "Rascunho",
@@ -136,18 +165,31 @@ export default async (req: Request): Promise<Response> => {
         historicoStatus: [
           { status: "Rascunho", data: now, colaboradorId: user.colaboradorId, colaboradorNome: user.nome },
         ],
+        dataEnvioAnalise: null,
         createdAt: now,
         updatedAt: now,
       };
 
       if (input.action === "submit") {
         validarEnvio(input, cartas.length, imagens.length);
+        const dataEnvio = new Date().toISOString();
+        // Missões aprovadas na mesma data geram conflito de agenda.
+        const conflito = (await listAll<Missao>(STORES.missoes)).find(
+          (m) => m.status === "Aprovada" && m.data === record.data
+        );
+        if (conflito) {
+          throw new HttpError(
+            409,
+            `Já existe a missão "${conflito.nome}" (${conflito.numero || "sem número"}) aprovada para ${record.data}. Escolha outra data.`
+          );
+        }
         const year = new Date(record.data).getFullYear() || new Date().getFullYear();
         record.numero = await nextMissionNumber(year);
         record.status = "Enviado Análise";
+        record.dataEnvioAnalise = dataEnvio;
         record.historicoStatus.push({
           status: "Enviado Análise",
-          data: new Date().toISOString(),
+          data: dataEnvio,
           colaboradorId: user.colaboradorId,
           colaboradorNome: user.nome,
         });
@@ -175,15 +217,13 @@ export default async (req: Request): Promise<Response> => {
       for (const key of input.removerCartasKeys || []) await s.delete(key).catch(() => {});
       for (const key of input.removerImagensKeys || []) await s.delete(key).catch(() => {});
 
-      const novasCartas = await salvarAnexos(input.novasCartas);
-      const novasImagens = await salvarAnexos(input.novasImagens);
       const cartas = [
         ...existing.cartas.filter((c) => !(input.removerCartasKeys || []).includes(c.blobKey)),
-        ...novasCartas,
+        ...(input.novasCartas || []),
       ];
       const imagens = [
         ...existing.imagens.filter((i) => !(input.removerImagensKeys || []).includes(i.blobKey)),
-        ...novasImagens,
+        ...(input.novasImagens || []),
       ];
       const itensCompra = (input.itensCompra || existing.itensCompra).map((i) => ({ ...i, id: i.id || uuidv4() }));
 
@@ -196,7 +236,8 @@ export default async (req: Request): Promise<Response> => {
         objetivos: input.objetivos!.trim(),
         cartas,
         imagens,
-        itensNecessarios: (input.itensNecessarios ?? existing.itensNecessarios).map((i) => i.trim()).filter(Boolean),
+        quantidadeOperadores: input.quantidadeOperadores ?? existing.quantidadeOperadores,
+        itensNecessarios: limparItensNecessarios(input.itensNecessarios ?? existing.itensNecessarios),
         itensCompra,
         investimentoTotal: totalItensCompra(itensCompra),
         updatedAt: new Date().toISOString(),
@@ -204,11 +245,21 @@ export default async (req: Request): Promise<Response> => {
 
       if (input.action === "submit") {
         validarEnvio(input, cartas.length, imagens.length);
+        const conflito = (await listAll<Missao>(STORES.missoes)).find(
+          (m) => m.id !== updated.id && m.status === "Aprovada" && m.data === updated.data
+        );
+        if (conflito) {
+          throw new HttpError(
+            409,
+            `Já existe a missão "${conflito.nome}" (${conflito.numero || "sem número"}) aprovada para ${updated.data}. Escolha outra data.`
+          );
+        }
         if (!updated.numero) {
           const year = new Date(updated.data).getFullYear() || new Date().getFullYear();
           updated.numero = await nextMissionNumber(year);
         }
         updated.status = "Enviado Análise";
+        updated.dataEnvioAnalise = updated.updatedAt;
         updated.historicoStatus.push({
           status: "Enviado Análise",
           data: updated.updatedAt,

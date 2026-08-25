@@ -11,6 +11,7 @@ interface ActionInput {
   observacao?: string;
   estrelas?: number;
   comentario?: string;
+  totalOperadoresPresentes?: number;
 }
 
 const TRANSICOES: Record<Action, { de: Missao["status"][]; para: Missao["status"] }> = {
@@ -18,7 +19,7 @@ const TRANSICOES: Record<Action, { de: Missao["status"][]; para: Missao["status"
   aprovar: { de: ["Em Análise"], para: "Aprovada" },
   reprovar: { de: ["Em Análise"], para: "Reprovada" },
   pendencia: { de: ["Em Análise"], para: "Pendência" },
-  avaliar: { de: ["Aprovada"], para: "Finalizada" },
+  avaliar: { de: ["Aprovada", "Aguardando Avaliação"], para: "Finalizada" },
 };
 
 export default async (req: Request): Promise<Response> => {
@@ -46,6 +47,9 @@ export default async (req: Request): Promise<Response> => {
       if (!input.estrelas || input.estrelas < 1 || input.estrelas > 5) {
         throw new HttpError(400, "Selecione uma avaliação de 1 a 5 estrelas.");
       }
+      if (!input.totalOperadoresPresentes || input.totalOperadoresPresentes < 1) {
+        throw new HttpError(400, "Informe o total de operadores presentes.");
+      }
     }
 
     const now = new Date().toISOString();
@@ -67,6 +71,7 @@ export default async (req: Request): Promise<Response> => {
       missao.avaliacao = {
         estrelas: input.estrelas!,
         comentario: input.comentario?.trim() || "",
+        totalOperadoresPresentes: input.totalOperadoresPresentes!,
         avaliadoPor: `${user.nome} ${user.sobrenome}`.trim(),
         avaliadoEm: now,
       };
