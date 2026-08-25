@@ -10,6 +10,28 @@ const MESES = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
+const PATCH_COLORS: Record<string, string> = {
+  Amarelo: "var(--yellow)",
+  Vermelho: "var(--red)",
+};
+
+// Cores fixas por posição do número Milsim (formato XXMXX, ex: 01M18):
+// 1º dígito=vermelho, 2º dígito=azul royal, letra M=branco, 4º dígito=azul,
+// 5º dígito=vermelho.
+const MILSIM_DIGIT_COLORS = ["#e33a3a", "#4169e1", "#ffffff", "#2f6fed", "#e33a3a"];
+
+function MilsimNumero({ numero }: { numero: string }) {
+  return (
+    <span>
+      {numero.split("").map((ch, idx) => (
+        <span key={idx} style={{ color: MILSIM_DIGIT_COLORS[idx] || "inherit", fontWeight: 700 }}>
+          {ch}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 const EMPTY_FILTROS = {
   dataInicio: "",
   dataFim: "",
@@ -94,7 +116,7 @@ export default function ListaOperadores() {
             <select value={filtros.patch} onChange={(e) => setFiltros({ ...filtros, patch: e.target.value })}>
               <option value="">Todos</option>
               {PATCHES.map((p) => (
-                <option key={p} value={p}>
+                <option key={p} value={p} style={{ color: PATCH_COLORS[p] }}>
                   {p}
                 </option>
               ))}
@@ -146,8 +168,16 @@ export default function ListaOperadores() {
                     <td>{o.email}</td>
                     <td>{o.telefone}</td>
                     <td>{o.grupoWhatsapp || "—"}</td>
-                    <td>{o.patch || "—"}</td>
-                    <td>{o.operadorMilsim ? o.numeroMilsim : "—"}</td>
+                    <td>
+                      {o.patch ? (
+                        <span className="tag" style={{ color: PATCH_COLORS[o.patch] }}>
+                          {o.patch}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>{o.operadorMilsim && o.numeroMilsim ? <MilsimNumero numero={o.numeroMilsim} /> : "—"}</td>
                     <td>
                       <span className="tag" style={{ color: o.status === "Ativo" ? "#7be395" : "#ff8080" }}>
                         {o.status === "Ativo" ? "ATIVO" : "INATIVO"}

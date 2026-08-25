@@ -15,6 +15,11 @@ const DIAS = Array.from({ length: 31 }, (_, i) => i + 1);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const PATCH_COLORS: Record<string, string> = {
+  Amarelo: "var(--yellow)",
+  Vermelho: "var(--red)",
+};
+
 function maskTelefone(value: string) {
   const d = value.replace(/\D/g, "").slice(0, 11);
   if (d.length <= 2) return d.length ? `(${d}` : "";
@@ -260,7 +265,7 @@ export default function Operadores() {
                 >
                   <option value="">—</option>
                   {PATCHES.map((p) => (
-                    <option key={p} value={p}>
+                    <option key={p} value={p} style={{ color: PATCH_COLORS[p] }}>
                       {p}
                     </option>
                   ))}
@@ -363,7 +368,15 @@ export default function Operadores() {
                     <td>{o.email}</td>
                     <td>{o.telefone}</td>
                     <td>{o.grupoWhatsapp || "—"}</td>
-                    <td>{o.patch || "—"}</td>
+                    <td>
+                      {o.patch ? (
+                        <span className="tag" style={{ color: PATCH_COLORS[o.patch] }}>
+                          {o.patch}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td>{o.operadorMilsim ? o.numeroMilsim : "—"}</td>
                     <td>
                       <span className="tag" style={{ color: o.status === "Ativo" ? "#7be395" : "#ff8080" }}>
