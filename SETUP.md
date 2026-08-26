@@ -1,4 +1,4 @@
-# Carcará · Sistema de Missões — Guia de publicação
+# Gestão Carcarás — Guia de publicação
 
 Este projeto é um site React (Vite) + Netlify Functions + Netlify Blobs —
 mesma stack leve do "App de Solicitação de Pedidos" que fizemos antes.
@@ -19,10 +19,10 @@ primeiro administrador cadastrado.
 
 ## Passo 1 — Criar as credenciais do login com Google
 
-1. Acesse o [Google Cloud Console](https://console.cloud.google.com/) e crie um projeto novo (ex: "Carcará Missões").
+1. Acesse o [Google Cloud Console](https://console.cloud.google.com/) e crie um projeto novo (ex: "Gestão Carcarás").
 2. No menu, vá em **APIs e Serviços → Tela de consentimento OAuth**.
    - Tipo de usuário: **Externo**.
-   - Preencha nome do app ("Carcará · Sistema de Missões"), e-mail de suporte e e-mail do desenvolvedor.
+   - Preencha nome do app ("Gestão Carcarás"), e-mail de suporte e e-mail do desenvolvedor.
    - Em "Público-alvo"/"Test users", adicione os e-mails do time enquanto o app estiver em modo de teste (ou publique o app depois, se quiser liberar geral).
 3. Vá em **APIs e Serviços → Credenciais → Criar credenciais → ID do cliente OAuth**.
    - Tipo de aplicativo: **Aplicativo da Web**.
@@ -39,7 +39,7 @@ Dentro da pasta do projeto (a mesma pasta deste arquivo):
 ```bash
 git init
 git add .
-git commit -m "Sistema de Missões Carcará - versão inicial"
+git commit -m "Gestão Carcarás - versão inicial"
 ```
 
 Crie um repositório vazio no GitHub (ex: `carcara-missoes`) e depois:

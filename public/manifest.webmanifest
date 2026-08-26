@@ -1,7 +1,7 @@
 {
   "name": "Gestão Carcarás",
   "short_name": "Carcarás",
-  "description": "Sistema de Missões do Carcará Airsoft Team",
+  "description": "Gestão de missões do Carcará Airsoft Team",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

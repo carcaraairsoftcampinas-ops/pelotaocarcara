@@ -66,7 +66,7 @@ export default function Login() {
     <div className="login-screen">
       <div className="login-card">
         <img src="/logo-carcara.jpg" alt="Carcará Airsoft Team" style={{ borderRadius: 12 }} />
-        <h1>Sistema de Missões</h1>
+        <h1>Gestão Carcarás</h1>
         <p>Entre com sua conta Google cadastrada pelo time para acessar o sistema.</p>
         {sessaoExpirada && !error && (
           <div className="banner banner-error" style={{ textAlign: "left" }}>
