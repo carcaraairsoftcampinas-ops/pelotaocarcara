@@ -62,7 +62,7 @@ export const MENU: MenuGroup[] = [
   },
   {
     label: "Auditoria",
-    perfis: ["Administrador", "Coordenador", "Colaborador", "Financeiro"],
+    perfis: ["Administrador"],
     items: [{ label: "Logs", path: "/logs" }],
   },
 ];

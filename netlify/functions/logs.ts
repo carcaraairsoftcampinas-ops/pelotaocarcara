@@ -11,9 +11,10 @@ interface LogUpdateInput {
 export default async (req: Request): Promise<Response> => {
   return handleErrors(async () => {
     const user = requireUser(req);
+    // Auditoria: só o Administrador acessa a tela de Logs (leitura e edição).
+    requirePerfil(user, ["Administrador"]);
 
     if (req.method === "GET") {
-      // Auditoria: qualquer perfil autenticado pode visualizar todos os logs.
       let all = await listAll<LogEntry>(STORES.logs);
 
       const url = new URL(req.url);
@@ -34,10 +35,10 @@ export default async (req: Request): Promise<Response> => {
     }
 
     if (req.method === "PUT") {
-      // Só Administrador pode corrigir o texto de um registro já existente
-      // (ex.: um erro de digitação numa observação) — o registro em si nunca
-      // muda de autor/data/ação original, só o campo `detalhes`.
-      requirePerfil(user, ["Administrador"]);
+      // Corrige o texto de um registro já existente (ex.: um erro de
+      // digitação numa observação) — o registro em si nunca muda de
+      // autor/data/ação original, só o campo `detalhes`. (Já é
+      // Administrador-only pelo requirePerfil no topo da função.)
       const input = await readJson<LogUpdateInput>(req);
       if (!input.id) throw new HttpError(400, "id é obrigatório.");
       const existing = await getById<LogEntry>(STORES.logs, input.id);

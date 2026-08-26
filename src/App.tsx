@@ -145,7 +145,7 @@ export default function App() {
         }
       />
 
-      <Route path="/logs" element={<Protected>{<Logs />}</Protected>} />
+      <Route path="/logs" element={<Protected perfis={["Administrador"]}>{<Logs />}</Protected>} />
 
       <Route path="*" element={<Protected>{<Home />}</Protected>} />
     </Routes>
