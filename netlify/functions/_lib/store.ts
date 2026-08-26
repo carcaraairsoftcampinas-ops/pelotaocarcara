@@ -8,6 +8,7 @@ export const STORES = {
   colaboradores: "colaboradores",
   campos: "campos",
   operadores: "operadores",
+  produtos: "produtos",
   missoes: "missoes",
   financeiro: "financeiro",
   counters: "counters",

@@ -3,7 +3,7 @@ import { json, readJson, handleErrors, HttpError } from "./_lib/http";
 import { requireUser, requirePerfil } from "./_lib/session";
 import { listAll, getById, upsert, remove, STORES } from "./_lib/store";
 import { registrarLog } from "./_lib/log";
-import type { LancamentoFinanceiro, ItemInvestimento, ItemCredito, Missao } from "../../shared/types";
+import type { LancamentoFinanceiro, ItemInvestimento, ItemCredito, ItemPedido, Missao } from "../../shared/types";
 
 // Rótulos legíveis dos campos comparados entre a versão antiga e a nova de
 // um lançamento editado — usado só pra montar o texto do log de auditoria.
@@ -15,6 +15,8 @@ const CAMPOS_LANCAMENTO: [string, keyof LancamentoFinanceiro][] = [
   ["Despesas", "investimentos"],
   ["Observações (Despesas)", "observacoesInvestimentos"],
   ["Créditos", "creditos"],
+  ["Vai ter pedido?", "temPedido"],
+  ["Pedidos", "pedidos"],
 ];
 
 function camposLancamentoAlterados(antigo: LancamentoFinanceiro, novo: LancamentoFinanceiro): string[] {
@@ -45,6 +47,8 @@ interface LancamentoInput {
   investimentos?: ItemInvestimento[];
   observacoesInvestimentos?: string;
   creditos?: ItemCredito[];
+  temPedido?: boolean;
+  pedidos?: ItemPedido[];
   action?: "save" | "aprovacao";
 }
 
@@ -62,11 +66,20 @@ function validarDados(input: LancamentoInput) {
   }
 }
 
-function validarAprovacao(investimentos: ItemInvestimento[], creditos: ItemCredito[]) {
+function validarAprovacao(
+  investimentos: ItemInvestimento[],
+  creditos: ItemCredito[],
+  temPedido: boolean,
+  pedidos: ItemPedido[]
+) {
   if (investimentos.length === 0) {
     throw new HttpError(400, "Informe ao menos um item de despesa antes de enviar para aprovação.");
   }
-  if (creditos.length === 0) {
+  if (temPedido) {
+    if (pedidos.length === 0) {
+      throw new HttpError(400, "Informe ao menos um pedido antes de enviar para aprovação.");
+    }
+  } else if (creditos.length === 0) {
     throw new HttpError(400, "Informe ao menos uma linha de créditos antes de enviar para aprovação.");
   }
 }
@@ -79,6 +92,8 @@ function limparInvestimentos(itens: ItemInvestimento[] | undefined): ItemInvesti
       nome: i.nome.trim(),
       quantidade: Math.max(0, Number(i.quantidade) || 0),
       valorUnitario: Math.max(0, Number(i.valorUnitario) || 0),
+      data: i.data || "",
+      recebido: !!i.recebido,
     }));
 }
 
@@ -90,6 +105,22 @@ function limparCreditos(itens: ItemCredito[] | undefined): ItemCredito[] {
       data: c.data || "",
       descricao: c.descricao?.trim() || "",
       valor: Math.max(0, Number(c.valor) || 0),
+      recebido: !!c.recebido,
+    }));
+}
+
+function limparPedidos(itens: ItemPedido[] | undefined): ItemPedido[] {
+  return (itens || [])
+    .filter((p) => p.nomeOperador?.trim() && p.produtoId)
+    .map((p) => ({
+      id: p.id || uuidv4(),
+      nomeOperador: p.nomeOperador.trim(),
+      tamanho: p.tamanho || "",
+      produtoId: p.produtoId,
+      produtoNome: p.produtoNome?.trim() || "",
+      quantidade: Math.max(0, Number(p.quantidade) || 0),
+      valorUnitario: Math.max(0, Number(p.valorUnitario) || 0),
+      recebido: !!p.recebido,
     }));
 }
 
@@ -106,31 +137,68 @@ const STATUS_ANTIGO_PARA_NOVO: Record<string, LancamentoFinanceiro["status"]> = 
 // que não é mais array) e a tela inteira cai — foi a causa do "site fica
 // tudo preto" ao abrir Aprovação Financeira. Normaliza tudo pro formato
 // atual assim que sai do banco, sem precisar migrar os dados manualmente.
+// Garante `data`/`recebido` em itens de despesa/crédito salvos antes da
+// Leva 13 (que não tinham esses campos) — sem isso o front quebraria ao
+// tentar ler `.data`/`.recebido` de um item antigo.
+function normalizarInvestimento(i: any): ItemInvestimento {
+  return {
+    id: i.id || uuidv4(),
+    nome: i.nome || "",
+    quantidade: Number(i.quantidade) || 0,
+    valorUnitario: Number(i.valorUnitario) || 0,
+    data: i.data || "",
+    recebido: !!i.recebido,
+  };
+}
+
+function normalizarCredito(c: any): ItemCredito {
+  return {
+    id: c.id || uuidv4(),
+    data: c.data || "",
+    descricao: c.descricao || "",
+    valor: Number(c.valor) || 0,
+    recebido: !!c.recebido,
+  };
+}
+
+// Registros criados antes da Leva 14 não têm `temPedido`/`pedidos` —
+// default pra `false`/`[]` (comportamento antigo: bloco Créditos).
+function normalizarPedido(p: any): ItemPedido {
+  return {
+    id: p.id || uuidv4(),
+    nomeOperador: p.nomeOperador || "",
+    tamanho: p.tamanho || "",
+    produtoId: p.produtoId || "",
+    produtoNome: p.produtoNome || "",
+    quantidade: Number(p.quantidade) || 0,
+    valorUnitario: Number(p.valorUnitario) || 0,
+    recebido: !!p.recebido,
+  };
+}
+
 function normalizarLancamento(raw: any): LancamentoFinanceiro {
-  const investimentos: ItemInvestimento[] = Array.isArray(raw.investimentos)
+  const investimentosBase: any[] = Array.isArray(raw.investimentos)
     ? raw.investimentos
     : Array.isArray(raw.gastos)
-    ? raw.gastos.map((g: any) => ({
-        id: g.id || uuidv4(),
-        nome: g.nome || "",
-        quantidade: Number(g.quantidade) || 0,
-        valorUnitario: Number(g.valorUnitario) || 0,
-      }))
+    ? raw.gastos
     : [];
+  const investimentos: ItemInvestimento[] = investimentosBase.map(normalizarInvestimento);
 
-  let creditos: ItemCredito[];
+  let creditosBase: any[];
   if (Array.isArray(raw.creditos)) {
-    creditos = raw.creditos;
+    creditosBase = raw.creditos;
   } else if (raw.creditos && typeof raw.creditos === "object") {
     const c = raw.creditos;
     const dataBase = (raw.createdAt || "").slice(0, 10);
-    creditos = [];
-    if (Number(c.pix) > 0) creditos.push({ id: uuidv4(), data: dataBase, descricao: "PIX (migrado)", valor: Number(c.pix) });
-    if (Number(c.especie) > 0) creditos.push({ id: uuidv4(), data: dataBase, descricao: "Espécie (migrado)", valor: Number(c.especie) });
-    if (Number(c.outros) > 0) creditos.push({ id: uuidv4(), data: dataBase, descricao: "Outros (migrado)", valor: Number(c.outros) });
+    creditosBase = [];
+    if (Number(c.pix) > 0) creditosBase.push({ id: uuidv4(), data: dataBase, descricao: "PIX (migrado)", valor: Number(c.pix) });
+    if (Number(c.especie) > 0) creditosBase.push({ id: uuidv4(), data: dataBase, descricao: "Espécie (migrado)", valor: Number(c.especie) });
+    if (Number(c.outros) > 0) creditosBase.push({ id: uuidv4(), data: dataBase, descricao: "Outros (migrado)", valor: Number(c.outros) });
   } else {
-    creditos = [];
+    creditosBase = [];
   }
+  const creditos: ItemCredito[] = creditosBase.map(normalizarCredito);
+  const pedidos: ItemPedido[] = Array.isArray(raw.pedidos) ? raw.pedidos.map(normalizarPedido) : [];
 
   const status: LancamentoFinanceiro["status"] = STATUS_ANTIGO_PARA_NOVO[raw.status] || raw.status;
 
@@ -145,6 +213,8 @@ function normalizarLancamento(raw: any): LancamentoFinanceiro {
     investimentos,
     observacoesInvestimentos: raw.observacoesInvestimentos || "",
     creditos,
+    temPedido: !!raw.temPedido,
+    pedidos,
     status,
     observacaoAprovacao: raw.observacaoAprovacao || "",
     criadoPorId: raw.criadoPorId,
@@ -186,10 +256,11 @@ export default async (req: Request): Promise<Response> => {
       const input = await readJson<LancamentoInput>(req);
       validarDados(input);
 
+      let missaoVinculada: Missao | null = null;
       if (input.tipo === "missao") {
-        const missao = await getById<Missao>(STORES.missoes, input.missaoId!);
-        if (!missao) throw new HttpError(404, "Missão não encontrada.");
-        if (missao.status !== "Aprovada" && missao.status !== "Finalizada") {
+        missaoVinculada = await getById<Missao>(STORES.missoes, input.missaoId!);
+        if (!missaoVinculada) throw new HttpError(404, "Missão não encontrada.");
+        if (missaoVinculada.status !== "Aprovada" && missaoVinculada.status !== "Finalizada") {
           throw new HttpError(400, "Só é possível lançar financeiro de missões Aprovadas ou Finalizadas.");
         }
         const existentes = await listAll<LancamentoFinanceiro>(STORES.financeiro);
@@ -200,6 +271,8 @@ export default async (req: Request): Promise<Response> => {
 
       const investimentos = limparInvestimentos(input.investimentos);
       const creditos = limparCreditos(input.creditos);
+      const temPedido = input.tipo === "projeto" && !!input.temPedido;
+      const pedidos = temPedido ? limparPedidos(input.pedidos) : [];
       const now = new Date().toISOString();
 
       const record: LancamentoFinanceiro = {
@@ -213,6 +286,8 @@ export default async (req: Request): Promise<Response> => {
         investimentos,
         observacoesInvestimentos: input.observacoesInvestimentos?.trim() || "",
         creditos,
+        temPedido,
+        pedidos,
         status: "Em Andamento",
         observacaoAprovacao: "",
         criadoPorId: user.colaboradorId,
@@ -225,7 +300,13 @@ export default async (req: Request): Promise<Response> => {
       };
 
       if (input.action === "aprovacao") {
-        validarAprovacao(investimentos, creditos);
+        validarAprovacao(investimentos, creditos, temPedido, pedidos);
+        if (input.tipo === "missao" && missaoVinculada?.status !== "Finalizada") {
+          throw new HttpError(
+            400,
+            "Só é possível enviar um lançamento de Missão para Aprovação Financeira depois que a missão estiver Finalizada."
+          );
+        }
         record.status = "Aprovação Pendente";
         record.historicoStatus.push({
           status: "Aprovação Pendente",
@@ -262,6 +343,8 @@ export default async (req: Request): Promise<Response> => {
 
       const investimentos = limparInvestimentos(input.investimentos);
       const creditos = limparCreditos(input.creditos);
+      const temPedido = existing.tipo === "projeto" && !!input.temPedido;
+      const pedidos = temPedido ? limparPedidos(input.pedidos) : [];
       const now = new Date().toISOString();
 
       const updated: LancamentoFinanceiro = {
@@ -273,12 +356,23 @@ export default async (req: Request): Promise<Response> => {
         investimentos,
         observacoesInvestimentos: input.observacoesInvestimentos?.trim() || "",
         creditos,
+        temPedido,
+        pedidos,
         status: "Em Andamento",
         updatedAt: now,
       };
 
       if (input.action === "aprovacao") {
-        validarAprovacao(investimentos, creditos);
+        validarAprovacao(investimentos, creditos, temPedido, pedidos);
+        if (existing.tipo === "missao" && existing.missaoId) {
+          const missaoVinculada = await getById<Missao>(STORES.missoes, existing.missaoId);
+          if (!missaoVinculada || missaoVinculada.status !== "Finalizada") {
+            throw new HttpError(
+              400,
+              "Só é possível enviar um lançamento de Missão para Aprovação Financeira depois que a missão estiver Finalizada."
+            );
+          }
+        }
         updated.status = "Aprovação Pendente";
         updated.historicoStatus.push({
           status: "Aprovação Pendente",

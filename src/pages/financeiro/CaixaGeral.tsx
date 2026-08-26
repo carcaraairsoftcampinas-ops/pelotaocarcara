@@ -5,9 +5,34 @@ import { StatusFinanceiroBadge } from "../../components/StatusBadge";
 import { api, ApiError } from "../../lib/api";
 import { buildMovimentacaoRows } from "../../lib/financeiroRows";
 import type { MovimentacaoRow } from "../../lib/financeiroRows";
-import { totalInvestimentos, totalCreditosItens, resultadoLancamento, formatBRL, formatDate } from "../../../shared/calc";
+import {
+  totalInvestimentos,
+  totalRecebidoLancamento,
+  resultadoLancamento,
+  formatBRL,
+  formatDate,
+} from "../../../shared/calc";
 import { STATUS_FINANCEIRO_PROVISAO } from "../../../shared/types";
 import type { LancamentoFinanceiro, Missao } from "../../../shared/types";
+
+// Dinheiro que já é "real" mesmo sem o lançamento estar Financeiro Aprovado:
+// itens de despesa/crédito/pedido já marcados "Recebido" individualmente
+// enquanto o lançamento ainda está Em Andamento. Lançamentos em Aprovação
+// Pendente/Financeiro Pendente ficam de fora — já estão em fluxo de
+// aprovação, contam só como provisão até resolver.
+function valoresRealizados(l: LancamentoFinanceiro): { recebido: number; gasto: number } {
+  if (l.status === "Financeiro Aprovado") {
+    return { recebido: totalRecebidoLancamento(l), gasto: totalInvestimentos(l.investimentos) };
+  }
+  if (l.status === "Em Andamento") {
+    const gasto = l.investimentos.filter((i) => i.recebido).reduce((sum, i) => sum + i.quantidade * i.valorUnitario, 0);
+    const recebido = l.temPedido
+      ? l.pedidos.filter((p) => p.recebido).reduce((sum, p) => sum + p.quantidade * p.valorUnitario, 0)
+      : l.creditos.filter((c) => c.recebido).reduce((sum, c) => sum + c.valor, 0);
+    return { recebido, gasto };
+  }
+  return { recebido: 0, gasto: 0 };
+}
 
 // Data em que um lançamento entrou de fato no caixa — usada pro filtro de
 // período do bloco "aprovados" (auditoria de "como estava o caixa naquela
@@ -91,9 +116,17 @@ export default function CaixaGeral() {
     setFiltrosProvisaoAplicados(filtrosProvisao);
   }
 
-  const totalRecebido = aprovados.reduce((sum, l) => sum + totalCreditosItens(l.creditos), 0);
-  const totalGasto = aprovados.reduce((sum, l) => sum + totalInvestimentos(l.investimentos), 0);
+  // Total Recebido/Gasto "de verdade" — soma TODOS os lançamentos (não só o
+  // filtro de auditoria abaixo): Financeiro Aprovado conta por inteiro, e
+  // Em Andamento conta só os itens já marcados "Recebido" individualmente
+  // (ver valoresRealizados). Aprovação Pendente/Financeiro Pendente não
+  // entram aqui — continuam só como provisão até resolver.
+  const totalRecebido = lancamentos.reduce((sum, l) => sum + valoresRealizados(l).recebido, 0);
+  const totalGasto = lancamentos.reduce((sum, l) => sum + valoresRealizados(l).gasto, 0);
   const saldo = totalRecebido - totalGasto;
+
+  const corSaldo = saldo >= 5000 ? "var(--green)" : saldo >= 3000 ? "var(--yellow)" : "var(--red)";
+  const saldoComemoracao = saldo >= 8000;
 
   // Provisões: tudo que ainda não é "Financeiro Aprovado" — missões Aprovada/
   // Finalizada sem lançamento ainda (status derivado) + lançamentos de
@@ -127,7 +160,7 @@ export default function CaixaGeral() {
   const provisaoCredito = linhasProvisao.reduce((sum, r) => {
     if (r.lancamentoId) {
       const l = lancamentos.find((x) => x.id === r.lancamentoId);
-      return sum + (l ? totalCreditosItens(l.creditos) : 0);
+      return sum + (l ? totalRecebidoLancamento(l) : 0);
     }
     return sum;
   }, 0);
@@ -174,26 +207,29 @@ export default function CaixaGeral() {
           <div className="grid grid-3">
             <div className="card">
               <h2>Total recebido</h2>
-              <p className="value" style={{ fontSize: 24, color: "var(--green)" }}>
+              <p className="value" style={{ fontSize: 24, color: "var(--blue)" }}>
                 {formatBRL(totalRecebido)}
               </p>
             </div>
             <div className="card">
               <h2>Total gasto</h2>
-              <p className="value" style={{ fontSize: 24, color: "var(--red)" }}>
+              <p className="value" style={{ fontSize: 24, color: "var(--orange)" }}>
                 {formatBRL(totalGasto)}
               </p>
             </div>
-            <div className="card">
+            <div className={`card${saldoComemoracao ? " saldo-comemoracao" : ""}`}>
               <h2>Saldo em caixa</h2>
-              <p className="value" style={{ fontSize: 24, color: "var(--gold)" }}>
-                {formatBRL(saldo)}
+              <p className="value" style={{ fontSize: 24, color: corSaldo }}>
+                {formatBRL(saldo)} {saldoComemoracao && "🎉🍺"}
               </p>
             </div>
           </div>
           <p className="hint" style={{ marginTop: -12, marginBottom: 16 }}>
-            Números reais — considera só missões e projetos já com status "Financeiro Aprovado". Use os filtros
-            abaixo para auditar como estava o caixa em um período específico.
+            Números reais — considera missões e projetos com status "Financeiro Aprovado" (por inteiro) e também
+            lançamentos "Em Andamento" que já têm itens marcados como "Recebido" individualmente (só a parte já
+            confirmada). Use os filtros abaixo para auditar como estava o caixa em um período específico.
+            Saldo: verde de R$ 5.000 a R$ 7.999,99, amarelo de R$ 3.000 a R$ 4.999,99, vermelho abaixo de R$ 3.000,
+            e verde com 🎉🍺 acima de R$ 8.000.
           </p>
 
           <div className="card">
@@ -253,9 +289,11 @@ export default function CaixaGeral() {
                         <td>{l.tipo === "missao" ? "Missão" : "Projeto"}</td>
                         <td>{titulo(l)}</td>
                         <td>{formatDate(dataAprovacao(l))}</td>
-                        <td>{formatBRL(totalCreditosItens(l.creditos))}</td>
-                        <td>{formatBRL(totalInvestimentos(l.investimentos))}</td>
-                        <td>{formatBRL(resultadoLancamento(l))}</td>
+                        <td style={{ color: "var(--blue)" }}>{formatBRL(totalRecebidoLancamento(l))}</td>
+                        <td style={{ color: "var(--orange)" }}>{formatBRL(totalInvestimentos(l.investimentos))}</td>
+                        <td style={{ color: resultadoLancamento(l) >= 0 ? "var(--green)" : "var(--red)", fontWeight: 700 }}>
+                          {formatBRL(resultadoLancamento(l))}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -300,15 +338,20 @@ export default function CaixaGeral() {
             <div className="grid grid-3">
               <div className="summary-box">
                 <span>Previsto a gastar</span>
-                <span className="value">{formatBRL(provisaoGasto)}</span>
+                <span className="value" style={{ color: "var(--orange)" }}>{formatBRL(provisaoGasto)}</span>
               </div>
               <div className="summary-box">
                 <span>Previsto a receber (já lançado)</span>
-                <span className="value">{formatBRL(provisaoCredito)}</span>
+                <span className="value" style={{ color: "var(--blue)" }}>{formatBRL(provisaoCredito)}</span>
               </div>
               <div className="summary-box" style={{ borderColor: "var(--gold-dim)" }}>
                 <span>Saldo previsto</span>
-                <span className="value">{formatBRL(provisaoCredito - provisaoGasto)}</span>
+                <span
+                  className="value"
+                  style={{ color: provisaoCredito - provisaoGasto >= 0 ? "var(--green)" : "var(--red)" }}
+                >
+                  {formatBRL(provisaoCredito - provisaoGasto)}
+                </span>
               </div>
             </div>
             {linhasProvisao.length === 0 ? (
@@ -394,30 +437,68 @@ export default function CaixaGeral() {
                   </div>
                 )}
 
-                <h3 style={{ marginTop: 16 }}>Créditos</h3>
-                {detalhe.lancamento.creditos.length === 0 ? (
-                  <p className="hint">Nenhum crédito lançado.</p>
+                {detalhe.lancamento.temPedido ? (
+                  <>
+                    <h3 style={{ marginTop: 16 }}>Pedidos</h3>
+                    {detalhe.lancamento.pedidos.length === 0 ? (
+                      <p className="hint">Nenhum pedido lançado.</p>
+                    ) : (
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Nome do Operador</th>
+                              <th>Tamanho</th>
+                              <th>Produto</th>
+                              <th>Qtd</th>
+                              <th>Valor unit.</th>
+                              <th>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {detalhe.lancamento.pedidos.map((p) => (
+                              <tr key={p.id}>
+                                <td>{p.nomeOperador}</td>
+                                <td>{p.tamanho || "—"}</td>
+                                <td>{p.produtoNome}</td>
+                                <td>{p.quantidade}</td>
+                                <td>{formatBRL(p.valorUnitario)}</td>
+                                <td>{formatBRL(p.quantidade * p.valorUnitario)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Data</th>
-                          <th>Descrição</th>
-                          <th>Valor</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detalhe.lancamento.creditos.map((c) => (
-                          <tr key={c.id}>
-                            <td>{formatDate(c.data)}</td>
-                            <td>{c.descricao}</td>
-                            <td>{formatBRL(c.valor)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <>
+                    <h3 style={{ marginTop: 16 }}>Créditos</h3>
+                    {detalhe.lancamento.creditos.length === 0 ? (
+                      <p className="hint">Nenhum crédito lançado.</p>
+                    ) : (
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Data</th>
+                              <th>Descrição</th>
+                              <th>Valor</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {detalhe.lancamento.creditos.map((c) => (
+                              <tr key={c.id}>
+                                <td>{formatDate(c.data)}</td>
+                                <td>{c.descricao}</td>
+                                <td>{formatBRL(c.valor)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             ) : (

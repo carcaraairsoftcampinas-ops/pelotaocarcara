@@ -38,12 +38,30 @@ export interface Campo {
   updatedAt: string;
 }
 
+// Cadastro de Produtos — usado como catálogo de escolha nos Pedidos do
+// Lançamento de Projetos (ver ItemPedido mais abaixo).
+export interface Produto {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type GrupoWhatsapp = "Oficial" | "Aposentados" | "Convidados";
 export type Patch = "Amarelo" | "Vermelho";
 export type StatusOperador = "Ativo" | "Inativo";
 
 export const GRUPOS_WHATSAPP: GrupoWhatsapp[] = ["Oficial", "Aposentados", "Convidados"];
 export const PATCHES: Patch[] = ["Amarelo", "Vermelho"];
+
+export interface HistoricoOperadorEntry {
+  id: string;
+  data: string; // YYYY-MM-DD — data do fato registrado
+  texto: string;
+  registradoPorNome: string;
+  criadoEm: string; // ISO — quando o registro foi de fato salvo
+}
 
 export interface Operador {
   id: string; // ex: "0001-2026"
@@ -58,7 +76,7 @@ export interface Operador {
   patch: Patch | null;
   operadorMilsim: boolean;
   numeroMilsim: string | null; // formato XXMXX
-  historico: string;
+  historico: HistoricoOperadorEntry[]; // log de ocorrências, mais recente primeiro
   status: StatusOperador;
   createdAt: string;
   updatedAt: string;
@@ -74,11 +92,16 @@ export type StatusMissao =
   | "Aguardando Avaliação"
   | "Finalizada";
 
+export type TipoMissao = "Semanal" | "Evento";
+export const TIPOS_MISSAO: TipoMissao[] = ["Semanal", "Evento"];
+
 export interface ItemCompra {
   id: string;
   nome: string;
   quantidade: number;
   valorUnitario: number;
+  link?: string; // link de compra do item (opcional)
+  comprado?: boolean; // marcado pelo Financeiro depois que a missão é aprovada
 }
 
 export interface ItemNecessario {
@@ -106,6 +129,7 @@ export interface Missao {
   id: string;
   numero: string | null; // ex: "001-2026", só atribuído ao enviar p/ análise
   nome: string;
+  tipo: TipoMissao;
   data: string;
   campoId: string;
   resumo: string;
@@ -119,6 +143,8 @@ export interface Missao {
   status: StatusMissao;
   criadoPorId: string;
   criadoPorNome: string;
+  analistaId: string | null; // quem clicou em "Iniciar Análise"
+  analistaNome: string | null;
   observacoesAnalise: string;
   avaliacao: Avaliacao | null;
   historicoStatus: HistoricoStatusEntry[];
@@ -138,6 +164,8 @@ export interface ItemInvestimento {
   nome: string;
   quantidade: number;
   valorUnitario: number;
+  data?: string; // YYYY-MM-DD, data da despesa (opcional)
+  recebido?: boolean; // marcado quando o item já foi de fato pago/recebido
 }
 
 export interface ItemCredito {
@@ -145,6 +173,23 @@ export interface ItemCredito {
   data: string; // YYYY-MM-DD, data do recebimento
   descricao: string;
   valor: number;
+  recebido?: boolean; // marcado quando o crédito já foi de fato recebido
+}
+
+export type TamanhoPedido = "P" | "M" | "G" | "GG" | "EG" | "EGG";
+export const TAMANHOS_PEDIDO: TamanhoPedido[] = ["P", "M", "G", "GG", "EG", "EGG"];
+
+// Linha de Pedido — só usado em Lançamento de Projetos quando `temPedido` é
+// true, no lugar do bloco Créditos (ver LancamentoFinanceiro abaixo).
+export interface ItemPedido {
+  id: string;
+  nomeOperador: string;
+  tamanho: TamanhoPedido | "";
+  produtoId: string; // referência ao Cadastro de Produtos
+  produtoNome: string; // snapshot do nome do produto no momento do pedido
+  quantidade: number;
+  valorUnitario: number;
+  recebido?: boolean; // marcado quando o pedido já foi de fato recebido/pago
 }
 
 export interface LancamentoFinanceiro {
@@ -157,7 +202,9 @@ export interface LancamentoFinanceiro {
   observacoesDados: string; // bloco "Dados" (não obrigatório)
   investimentos: ItemInvestimento[]; // bloco "Investimentos"
   observacoesInvestimentos: string; // não obrigatório
-  creditos: ItemCredito[]; // bloco "Créditos"
+  creditos: ItemCredito[]; // bloco "Créditos" — usado quando temPedido = false
+  temPedido: boolean; // só relevante pra tipo = "projeto" — troca Créditos por Pedidos
+  pedidos: ItemPedido[]; // bloco "Pedidos" — usado quando temPedido = true
   status: StatusFinanceiro;
   observacaoAprovacao: string;
   criadoPorId: string;

@@ -5,6 +5,7 @@ import { Field, Banner } from "../../components/Field";
 import { StatusBadge } from "../../components/StatusBadge";
 import { api, ApiError, arquivoUrl } from "../../lib/api";
 import { useAuth } from "../../lib/AuthContext";
+import { useActionNotice } from "../../lib/ActionNoticeContext";
 import { formatBRL, formatDate } from "../../../shared/calc";
 import { STATUS_MISSAO_ORDEM } from "../../../shared/types";
 import type { Campo, Colaborador, Missao } from "../../../shared/types";
@@ -12,6 +13,7 @@ import type { Campo, Colaborador, Missao } from "../../../shared/types";
 export default function ConsultaMissoes() {
   const { has, user } = useAuth();
   const navigate = useNavigate();
+  const { notify } = useActionNotice();
   const podeVerTudo = has("Administrador", "Coordenador");
   const somenteColaborador = !!user && user.perfis.includes("Colaborador") && !user.perfis.some((p) => p !== "Colaborador");
 
@@ -21,6 +23,7 @@ export default function ConsultaMissoes() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selecionada, setSelecionada] = useState<Missao | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
@@ -60,6 +63,21 @@ export default function ConsultaMissoes() {
     buscar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function excluirRascunho(m: Missao) {
+    if (!confirm(`Excluir o rascunho da missão "${m.nome}"? Essa ação não pode ser desfeita.`)) return;
+    setExcluindo(true);
+    try {
+      await api.del(`/missoes?id=${m.id}`);
+      notify("Rascunho excluído com sucesso.");
+      setSelecionada(null);
+      await buscar();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Erro ao excluir rascunho.");
+    } finally {
+      setExcluindo(false);
+    }
+  }
 
   const campoNome = useMemo(() => {
     const map = new Map(campos.map((c) => [c.id, c.nome]));
@@ -140,8 +158,7 @@ export default function ConsultaMissoes() {
                   <th>Status</th>
                   <th>Número</th>
                   <th>NOME DA MISSÃO</th>
-                  <th>Data</th>
-                  <th>Data de criação</th>
+                  <th>Data Evento</th>
                   <th>Campo</th>
                   <th>Colaborador</th>
                   <th>Qtde Operadores</th>
@@ -157,7 +174,6 @@ export default function ConsultaMissoes() {
                     <td>{m.numero || "—"}</td>
                     <td>{m.nome}</td>
                     <td>{formatDate(m.data)}</td>
-                    <td>{m.dataEnvioAnalise ? formatDate(m.dataEnvioAnalise) : "—"}</td>
                     <td>{campoNome(m.campoId)}</td>
                     <td>{m.criadoPorNome}</td>
                     <td>{m.quantidadeOperadores ?? "—"}</td>
@@ -180,18 +196,19 @@ export default function ConsultaMissoes() {
             <StatusBadge status={selecionada.status} />
           </div>
           <p>
-            <strong>Data:</strong> {formatDate(selecionada.data)} &nbsp;·&nbsp; <strong>Campo:</strong>{" "}
-            {campoNome(selecionada.campoId)} &nbsp;·&nbsp; <strong>Criado por:</strong> {selecionada.criadoPorNome}
-            {selecionada.dataEnvioAnalise && (
-              <>
-                {" "}
-                &nbsp;·&nbsp; <strong>Data de criação:</strong> {formatDate(selecionada.dataEnvioAnalise)}
-              </>
-            )}
+            <strong>Tipo:</strong> {selecionada.tipo || "Evento"} &nbsp;·&nbsp; <strong>Data Evento:</strong>{" "}
+            {formatDate(selecionada.data)} &nbsp;·&nbsp; <strong>Campo:</strong> {campoNome(selecionada.campoId)}
+            &nbsp;·&nbsp; <strong>Criado por:</strong> {selecionada.criadoPorNome}
             {selecionada.quantidadeOperadores != null && (
               <>
                 {" "}
                 &nbsp;·&nbsp; <strong>Operadores:</strong> {selecionada.quantidadeOperadores}
+              </>
+            )}
+            {selecionada.analistaNome && (
+              <>
+                {" "}
+                &nbsp;·&nbsp; <strong>Analista:</strong> {selecionada.analistaNome}
               </>
             )}
           </p>
@@ -225,6 +242,7 @@ export default function ConsultaMissoes() {
                       <th>Qtd</th>
                       <th>Valor unit.</th>
                       <th>Total</th>
+                      <th>Link de compra</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -234,6 +252,15 @@ export default function ConsultaMissoes() {
                         <td>{i.quantidade}</td>
                         <td>{formatBRL(i.valorUnitario)}</td>
                         <td>{formatBRL(i.quantidade * i.valorUnitario)}</td>
+                        <td>
+                          {i.link ? (
+                            <a href={i.link} target="_blank" rel="noreferrer">
+                              Abrir link
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -241,7 +268,7 @@ export default function ConsultaMissoes() {
               </div>
               <div className="summary-box">
                 <span>Total do investimento</span>
-                <span className="value">{formatBRL(selecionada.investimentoTotal)}</span>
+                <span className="value" style={{ color: "var(--orange)" }}>{formatBRL(selecionada.investimentoTotal)}</span>
               </div>
             </>
           )}
@@ -270,6 +297,17 @@ export default function ConsultaMissoes() {
           {selecionada.avaliacao && (
             <>
               <h3 style={{ marginTop: 16 }}>Avaliação</h3>
+              <p>
+                <strong>Avaliado por:</strong> {selecionada.avaliacao.avaliadoPor} &nbsp;·&nbsp;{" "}
+                <strong>Em:</strong> {formatDate(selecionada.avaliacao.avaliadoEm)}
+                {selecionada.avaliacao.totalOperadoresPresentes != null && (
+                  <>
+                    {" "}
+                    &nbsp;·&nbsp; <strong>Operadores presentes:</strong>{" "}
+                    {selecionada.avaliacao.totalOperadoresPresentes}
+                  </>
+                )}
+              </p>
               <p className="stars">{"★".repeat(selecionada.avaliacao.estrelas)}</p>
               <div className="readonly-block">{selecionada.avaliacao.comentario}</div>
             </>
@@ -280,6 +318,16 @@ export default function ConsultaMissoes() {
               selecionada.criadoPorId === user?.colaboradorId && (
                 <button className="btn btn-primary" onClick={() => navigate(`/missoes/nova/${selecionada.id}`)}>
                   Editar missão
+                </button>
+              )}
+            {selecionada.status === "Rascunho" &&
+              (selecionada.criadoPorId === user?.colaboradorId || has("Administrador")) && (
+                <button
+                  className="btn btn-danger"
+                  disabled={excluindo}
+                  onClick={() => excluirRascunho(selecionada)}
+                >
+                  {excluindo ? "Excluindo…" : "Excluir Rascunho"}
                 </button>
               )}
             <button className="btn btn-secondary" onClick={() => setSelecionada(null)}>

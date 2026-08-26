@@ -9,6 +9,31 @@ import type { Campo, Missao, StatusMissao } from "../../../shared/types";
 
 const STATUS_RELEVANTES: StatusMissao[] = ["Enviado Análise", "Em Análise", "Pendência", "Aprovada", "Reprovada"];
 
+type SortField = "status" | "numero" | "nome" | "data" | "campo" | "colaborador" | "operadores";
+interface SortState {
+  field: SortField | null;
+  dir: "asc" | "desc";
+}
+
+function SortableTh({
+  field,
+  sort,
+  onSort,
+  children,
+}: {
+  field: SortField;
+  sort: SortState;
+  onSort: (f: SortField) => void;
+  children: React.ReactNode;
+}) {
+  const ativo = sort.field === field;
+  return (
+    <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => onSort(field)}>
+      {children} {ativo ? (sort.dir === "asc" ? "▲" : "▼") : ""}
+    </th>
+  );
+}
+
 export default function AnaliseMissoes() {
   const { notify } = useActionNotice();
   const [missoes, setMissoes] = useState<Missao[]>([]);
@@ -25,6 +50,11 @@ export default function AnaliseMissoes() {
   const [filtroColaborador, setFiltroColaborador] = useState("");
   const [filtroDataInicio, setFiltroDataInicio] = useState("");
   const [filtroDataFim, setFiltroDataFim] = useState("");
+  const [sort, setSort] = useState<SortState>({ field: null, dir: "asc" });
+
+  function toggleSort(field: SortField) {
+    setSort((prev) => (prev.field === field ? { field, dir: prev.dir === "asc" ? "desc" : "asc" } : { field, dir: "asc" }));
+  }
 
   async function load() {
     setLoading(true);
@@ -93,6 +123,34 @@ export default function AnaliseMissoes() {
     .filter((m) => (filtroDataInicio ? m.data >= filtroDataInicio : true))
     .filter((m) => (filtroDataFim ? m.data <= filtroDataFim : true));
 
+  function valorOrdenavel(m: Missao, field: SortField): string | number {
+    switch (field) {
+      case "status":
+        return m.status;
+      case "numero":
+        return m.numero || "";
+      case "nome":
+        return m.nome;
+      case "data":
+        return m.data;
+      case "campo":
+        return campoNome(m.campoId);
+      case "colaborador":
+        return m.criadoPorNome;
+      case "operadores":
+        return m.quantidadeOperadores ?? -1;
+    }
+  }
+
+  const listaOrdenada = sort.field
+    ? [...listaFiltrada].sort((a, b) => {
+        const va = valorOrdenavel(a, sort.field!);
+        const vb = valorOrdenavel(b, sort.field!);
+        const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
+        return sort.dir === "asc" ? cmp : -cmp;
+      })
+    : listaFiltrada;
+
   return (
     <div>
       <PageHeader crumbs="Análise de Missões" title="Análise de Missões" />
@@ -155,18 +213,17 @@ export default function AnaliseMissoes() {
             <table>
               <thead>
                 <tr>
-                  <th>Status</th>
-                  <th>Número</th>
-                  <th>Nome</th>
-                  <th>Data</th>
-                  <th>Data de criação</th>
-                  <th>Campo</th>
-                  <th>Colaborador</th>
-                  <th>Qtde Operadores</th>
+                  <SortableTh field="status" sort={sort} onSort={toggleSort}>Status</SortableTh>
+                  <SortableTh field="numero" sort={sort} onSort={toggleSort}>Número</SortableTh>
+                  <SortableTh field="nome" sort={sort} onSort={toggleSort}>Nome</SortableTh>
+                  <SortableTh field="data" sort={sort} onSort={toggleSort}>Data Evento</SortableTh>
+                  <SortableTh field="campo" sort={sort} onSort={toggleSort}>Campo</SortableTh>
+                  <SortableTh field="colaborador" sort={sort} onSort={toggleSort}>Colaborador</SortableTh>
+                  <SortableTh field="operadores" sort={sort} onSort={toggleSort}>Qtde Operadores</SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {listaFiltrada.map((m) => (
+                {listaOrdenada.map((m) => (
                   <tr key={m.id} style={{ cursor: "pointer" }} onClick={() => abrir(m)}>
                     <td>
                       <StatusBadge status={m.status} />
@@ -174,7 +231,6 @@ export default function AnaliseMissoes() {
                     <td>{m.numero || "—"}</td>
                     <td>{m.nome}</td>
                     <td>{formatDate(m.data)}</td>
-                    <td>{m.dataEnvioAnalise ? formatDate(m.dataEnvioAnalise) : "—"}</td>
                     <td>{campoNome(m.campoId)}</td>
                     <td>{m.criadoPorNome}</td>
                     <td>{m.quantidadeOperadores ?? "—"}</td>
@@ -224,7 +280,7 @@ export default function AnaliseMissoes() {
               <h3 style={{ marginTop: 16 }}>Itens de compra</h3>
               <div className="summary-box">
                 <span>Total do investimento</span>
-                <span className="value">{formatBRL(selecionada.investimentoTotal)}</span>
+                <span className="value" style={{ color: "var(--orange)" }}>{formatBRL(selecionada.investimentoTotal)}</span>
               </div>
             </>
           )}

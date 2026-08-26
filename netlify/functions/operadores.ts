@@ -1,12 +1,21 @@
+import { v4 as uuidv4 } from "uuid";
 import { json, readJson, handleErrors, HttpError } from "./_lib/http";
 import { requireUser, requirePerfil } from "./_lib/session";
 import { listAll, getById, upsert, remove, nextOperadorId, STORES } from "./_lib/store";
 import { GRUPOS_WHATSAPP, PATCHES } from "../../shared/types";
-import type { Operador, GrupoWhatsapp, Patch, StatusOperador } from "../../shared/types";
+import type { Operador, GrupoWhatsapp, Patch, StatusOperador, HistoricoOperadorEntry } from "../../shared/types";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TELEFONE_RE = /^\(\d{2}\) \d{5}-\d{4}$/;
 const MILSIM_RE = /^\d{2}M\d{2}$/i;
+
+interface HistoricoInput {
+  id?: string;
+  data?: string;
+  texto?: string;
+  registradoPorNome?: string;
+  criadoEm?: string;
+}
 
 interface OperadorInput {
   id?: string;
@@ -21,8 +30,52 @@ interface OperadorInput {
   patch?: Patch | null;
   operadorMilsim?: boolean;
   numeroMilsim?: string | null;
-  historico?: string;
+  historico?: HistoricoInput[];
   status?: StatusOperador;
+}
+
+// Normaliza o histórico recebido do cliente: entradas já existentes (com
+// registradoPorNome/criadoEm) passam intactas; entradas novas (recém
+// adicionadas no formulário, sem esses dois campos) são carimbadas aqui no
+// servidor com quem está logado e o instante real do salvamento — o cliente
+// nunca pode forjar "quem registrou".
+function prepararHistorico(input: HistoricoInput[] | undefined, user: { nome: string; sobrenome: string }, now: string): HistoricoOperadorEntry[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((h) => h && h.texto?.trim() && h.data)
+    .map((h) => ({
+      id: h.id || uuidv4(),
+      data: h.data!,
+      texto: h.texto!.trim(),
+      registradoPorNome: h.registradoPorNome?.trim() || `${user.nome} ${user.sobrenome}`.trim(),
+      criadoEm: h.criadoEm || now,
+    }))
+    .sort((a, b) => (a.data === b.data ? (a.criadoEm < b.criadoEm ? 1 : -1) : a.data < b.data ? 1 : -1));
+}
+
+// Registros antigos guardavam `historico` como uma única string livre.
+// Converte pra lista (uma entrada, sem autor conhecido) só na leitura —
+// assim que o cadastro for salvo de novo já vira lista de verdade.
+function normalizarOperador(raw: any): Operador {
+  let historico = raw?.historico;
+  if (typeof historico === "string") {
+    const texto = historico.trim();
+    const dataBase = (raw.createdAt || new Date().toISOString()) as string;
+    historico = texto
+      ? [
+          {
+            id: uuidv4(),
+            data: dataBase.slice(0, 10),
+            texto,
+            registradoPorNome: "—",
+            criadoEm: dataBase,
+          },
+        ]
+      : [];
+  } else if (!Array.isArray(historico)) {
+    historico = [];
+  }
+  return { ...raw, historico } as Operador;
 }
 
 function validar(input: OperadorInput) {
@@ -66,11 +119,11 @@ export default async (req: Request): Promise<Response> => {
       if (id) {
         const o = await getById<Operador>(STORES.operadores, id);
         if (!o) throw new HttpError(404, "Operador não encontrado.");
-        return json(200, o);
+        return json(200, normalizarOperador(o));
       }
       const all = await listAll<Operador>(STORES.operadores);
       all.sort((a, b) => a.nome.localeCompare(b.nome));
-      return json(200, all);
+      return json(200, all.map(normalizarOperador));
     }
 
     requirePerfil(user, ["Administrador"]);
@@ -92,7 +145,7 @@ export default async (req: Request): Promise<Response> => {
         patch: input.patch ?? null,
         operadorMilsim: !!input.operadorMilsim,
         numeroMilsim: input.operadorMilsim ? input.numeroMilsim!.trim().toUpperCase() : null,
-        historico: input.historico?.trim() || "",
+        historico: prepararHistorico(input.historico, user, now),
         status: input.status || "Ativo",
         createdAt: now,
         updatedAt: now,
@@ -120,7 +173,7 @@ export default async (req: Request): Promise<Response> => {
         patch: input.patch ?? null,
         operadorMilsim: !!input.operadorMilsim,
         numeroMilsim: input.operadorMilsim ? input.numeroMilsim!.trim().toUpperCase() : null,
-        historico: input.historico?.trim() || "",
+        historico: prepararHistorico(input.historico, user, new Date().toISOString()),
         status: input.status || existing.status,
         updatedAt: new Date().toISOString(),
       };

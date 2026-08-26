@@ -20,6 +20,7 @@ export const MENU: MenuGroup[] = [
       { label: "Colaboradores", path: "/cadastros/colaboradores" },
       { label: "Campos", path: "/cadastros/campos" },
       { label: "Operadores", path: "/cadastros/operadores" },
+      { label: "Produtos", path: "/cadastros/produtos" },
       { label: "Reset do Sistema", path: "/cadastros/reset" },
     ],
   },

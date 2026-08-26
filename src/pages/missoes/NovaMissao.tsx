@@ -7,7 +7,8 @@ import { api, ApiError, arquivoUrl, uploadArquivo } from "../../lib/api";
 import { useActionNotice } from "../../lib/ActionNoticeContext";
 import { StatusBadge } from "../../components/StatusBadge";
 import { totalItensCompra, formatBRL } from "../../../shared/calc";
-import type { Campo, ItemCompra, ItemNecessario, Missao } from "../../../shared/types";
+import { TIPOS_MISSAO } from "../../../shared/types";
+import type { Campo, ItemCompra, ItemNecessario, Missao, TipoMissao } from "../../../shared/types";
 
 const RESUMO_EXEMPLO =
   "Serviços de inteligência internacionais identificaram que o cartel fictício \"Sombra Vermelha\" está por trás do crime organizado na região, comandado pelo líder conhecido apenas como \"El Cuervo\". Após meses de investigação, uma força-tarefa internacional foi montada para invadir o território controlado pela organização, capturar o líder e desativar os principais laboratórios de drogas e arsenais de armas identificados pela inteligência.";
@@ -38,6 +39,7 @@ export default function NovaMissao() {
   const [numero, setNumero] = useState<string | null>(null);
   const [status, setStatus] = useState<Missao["status"]>("Rascunho");
   const [nome, setNome] = useState("");
+  const [tipo, setTipo] = useState<TipoMissao>("Evento");
   const [data, setData] = useState(hojeISO());
   const [campoId, setCampoId] = useState("");
   const [resumo, setResumo] = useState("");
@@ -69,6 +71,7 @@ export default function NovaMissao() {
         setNumero(m.numero);
         setStatus(m.status);
         setNome(m.nome);
+        setTipo(m.tipo || "Evento");
         setData(m.data);
         setCampoId(m.campoId);
         setResumo(m.resumo);
@@ -135,8 +138,7 @@ export default function NovaMissao() {
     if (!objetivos.trim()) faltando.push("Objetivos da missão");
     const cartasTotal = cartasExistentes.filter((c) => !removerCartas.includes(c.blobKey)).length + novasCartas.length;
     if (cartasTotal === 0) faltando.push("Cartas da Missão (anexo)");
-    const imagensTotal = imagensExistentes.filter((c) => !removerImagens.includes(c.blobKey)).length + novasImagens.length;
-    if (imagensTotal === 0) faltando.push("Imagens (anexo)");
+    // Imagens deixaram de ser obrigatórias pra enviar pra análise.
     if (!quantidadeOperadores || Number(quantidadeOperadores) < 1) faltando.push("Quantidade de operadores");
     if (itensNecessarios.filter((i) => i.nome?.trim()).length === 0) faltando.push("Itens da missão");
     return faltando;
@@ -155,6 +157,7 @@ export default function NovaMissao() {
     try {
       const payload = {
         nome,
+        tipo,
         data,
         campoId,
         resumo,
@@ -217,20 +220,31 @@ export default function NovaMissao() {
             <Field label="Nome da Missão" required>
               <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} required />
             </Field>
+            <Field label="Semanal ou Evento" required>
+              <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoMissao)}>
+                {TIPOS_MISSAO.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="grid grid-2">
             <Field label="Data da Missão" required hint="Não pode coincidir com outra missão já Aprovada.">
               <input type="date" value={data} onChange={(e) => setData(e.target.value)} required />
             </Field>
+            <Field label="Campo da missão" required hint="Só aparecem campos Ativos (Cadastros → Campos).">
+              <select value={campoId} onChange={(e) => setCampoId(e.target.value)} required>
+                <option value="">Selecione…</option>
+                {campos.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
+                  </option>
+                ))}
+              </select>
+            </Field>
           </div>
-          <Field label="Campo da missão" required hint="Só aparecem campos Ativos (Cadastros → Campos).">
-            <select value={campoId} onChange={(e) => setCampoId(e.target.value)} required>
-              <option value="">Selecione…</option>
-              {campos.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nome}
-                </option>
-              ))}
-            </select>
-          </Field>
           <Field label="Quantidade de operadores" required hint="Obrigatório para enviar para análise.">
             <input
               type="number"
@@ -321,41 +335,51 @@ export default function NovaMissao() {
           <h2>Itens de compra (opcional)</h2>
           <p>Se houver necessidade de comprar material para a missão, adicione os itens abaixo.</p>
           {itensCompra.map((item) => (
-            <div className="item-row" key={item.id}>
-              <Field label="Nome do item">
+            <div key={item.id} style={{ marginBottom: 14 }}>
+              <div className="item-row">
+                <Field label="Nome do item">
+                  <input
+                    type="text"
+                    value={item.nome}
+                    onChange={(e) => updateItemCompra(item.id, { nome: e.target.value })}
+                  />
+                </Field>
+                <Field label="Quantidade">
+                  <input
+                    type="number"
+                    min={0}
+                    value={item.quantidade}
+                    onChange={(e) => updateItemCompra(item.id, { quantidade: Number(e.target.value) })}
+                  />
+                </Field>
+                <Field label="Valor unitário">
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={item.valorUnitario}
+                    onChange={(e) => updateItemCompra(item.id, { valorUnitario: Number(e.target.value) })}
+                  />
+                </Field>
+                <Field label="Total">
+                  <input type="text" readOnly value={formatBRL(item.quantidade * item.valorUnitario)} />
+                </Field>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setItensCompra((prev) => prev.filter((i) => i.id !== item.id))}
+                >
+                  Remover
+                </button>
+              </div>
+              <Field label="Link de compra (opcional)">
                 <input
-                  type="text"
-                  value={item.nome}
-                  onChange={(e) => updateItemCompra(item.id, { nome: e.target.value })}
+                  type="url"
+                  value={item.link || ""}
+                  onChange={(e) => updateItemCompra(item.id, { link: e.target.value })}
+                  placeholder="https://..."
                 />
               </Field>
-              <Field label="Quantidade">
-                <input
-                  type="number"
-                  min={0}
-                  value={item.quantidade}
-                  onChange={(e) => updateItemCompra(item.id, { quantidade: Number(e.target.value) })}
-                />
-              </Field>
-              <Field label="Valor unitário">
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={item.valorUnitario}
-                  onChange={(e) => updateItemCompra(item.id, { valorUnitario: Number(e.target.value) })}
-                />
-              </Field>
-              <Field label="Total">
-                <input type="text" readOnly value={formatBRL(item.quantidade * item.valorUnitario)} />
-              </Field>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => setItensCompra((prev) => prev.filter((i) => i.id !== item.id))}
-              >
-                Remover
-              </button>
             </div>
           ))}
           <button type="button" className="btn btn-secondary" onClick={addItemCompra}>
@@ -363,7 +387,7 @@ export default function NovaMissao() {
           </button>
           <div className="summary-box">
             <span>Total do investimento</span>
-            <span className="value">{formatBRL(totalCompra)}</span>
+            <span className="value" style={{ color: "var(--orange)" }}>{formatBRL(totalCompra)}</span>
           </div>
         </div>
 
@@ -411,7 +435,7 @@ export default function NovaMissao() {
             />
           </Field>
 
-          <Field label="Imagens" required hint="Obrigatório para enviar para análise.">
+          <Field label="Imagens" hint="Opcional — não é mais obrigatório para enviar para análise.">
             <div className="attach-list">
               {imagensExistentes
                 .filter((c) => !removerImagens.includes(c.blobKey))

@@ -4,12 +4,13 @@ import { requireUser, requirePerfil } from "./_lib/session";
 import { listAll, getById, upsert, remove, store, nextMissionNumber, STORES } from "./_lib/store";
 import { registrarLog } from "./_lib/log";
 import { totalItensCompra } from "../../shared/calc";
-import type { Missao, ItemCompra, ItemNecessario, SessionUser } from "../../shared/types";
+import type { Missao, ItemCompra, ItemNecessario, SessionUser, TipoMissao } from "../../shared/types";
 
 // Rótulos legíveis dos campos comparados entre a versão antiga e a nova de
 // uma missão editada — usado só pra montar o texto do log de auditoria.
 const CAMPOS_MISSAO: [string, keyof Missao][] = [
   ["Nome", "nome"],
+  ["Tipo", "tipo"],
   ["Data", "data"],
   ["Campo", "campoId"],
   ["Resumo", "resumo"],
@@ -39,6 +40,7 @@ interface AnexoRef {
 interface MissaoInput {
   id?: string;
   nome?: string;
+  tipo?: TipoMissao;
   data?: string;
   campoId?: string;
   resumo?: string;
@@ -50,7 +52,9 @@ interface MissaoInput {
   novasImagens?: AnexoRef[]; // idem
   removerCartasKeys?: string[];
   removerImagensKeys?: string[];
-  action?: "save" | "submit";
+  action?: "save" | "submit" | "marcarComprado";
+  itemCompraId?: string; // usado só com action = "marcarComprado"
+  comprado?: boolean; // idem
 }
 
 function podeVerTudo(user: SessionUser): boolean {
@@ -67,16 +71,28 @@ function validarRascunho(input: MissaoInput) {
   if (!input.objetivos?.trim()) throw new HttpError(400, "Objetivos da missão são obrigatórios.");
 }
 
-function validarEnvio(input: MissaoInput, cartasTotal: number, imagensTotal: number) {
+function validarEnvio(input: MissaoInput, cartasTotal: number) {
   validarRascunho(input);
   if (cartasTotal === 0) throw new HttpError(400, "Anexe ao menos uma Carta da Missão para enviar para análise.");
-  if (imagensTotal === 0) throw new HttpError(400, "Anexe ao menos uma Imagem para enviar para análise.");
+  // Imagens deixaram de ser obrigatórias pra enviar pra análise — só as Cartas continuam obrigatórias.
   if (!input.quantidadeOperadores || input.quantidadeOperadores < 1) {
     throw new HttpError(400, "Informe a quantidade de operadores para enviar para análise.");
   }
   if (!input.itensNecessarios || input.itensNecessarios.filter((i) => i.nome?.trim()).length === 0) {
     throw new HttpError(400, "Informe os itens necessários para a missão para enviar para análise.");
   }
+}
+
+// Registros criados antes da Leva 11 não têm `tipo` — assume "Evento" (o
+// caso mais comum até aqui) só na leitura; a partir do próximo salvamento o
+// campo já fica persistido de verdade.
+function normalizarMissao(raw: any): Missao {
+  return {
+    ...raw,
+    tipo: raw?.tipo === "Semanal" ? "Semanal" : "Evento",
+    analistaId: raw?.analistaId ?? null,
+    analistaNome: raw?.analistaNome ?? null,
+  } as Missao;
 }
 
 function limparItensNecessarios(itens: ItemNecessario[] | undefined): ItemNecessario[] {
@@ -128,7 +144,7 @@ export default async (req: Request): Promise<Response> => {
         if (!podeVerTudo(user) && m.criadoPorId !== user.colaboradorId) {
           throw new HttpError(403, "Você só pode visualizar as missões que criou.");
         }
-        return json(200, await aplicarTransicaoAutomatica(m));
+        return json(200, normalizarMissao(await aplicarTransicaoAutomatica(m)));
       }
 
       let all = await listAll<Missao>(STORES.missoes);
@@ -136,6 +152,7 @@ export default async (req: Request): Promise<Response> => {
         all = all.filter((m) => m.criadoPorId === user.colaboradorId);
       }
       all = await Promise.all(all.map((m) => aplicarTransicaoAutomatica(m)));
+      all = all.map(normalizarMissao);
 
       const dataInicio = url.searchParams.get("dataInicio");
       const dataFim = url.searchParams.get("dataFim");
@@ -173,6 +190,7 @@ export default async (req: Request): Promise<Response> => {
         id: uuidv4(),
         numero: null,
         nome: input.nome!.trim(),
+        tipo: input.tipo === "Semanal" ? "Semanal" : "Evento",
         data: input.data!,
         campoId: input.campoId!,
         resumo: input.resumo!.trim(),
@@ -186,6 +204,8 @@ export default async (req: Request): Promise<Response> => {
         status: "Rascunho",
         criadoPorId: user.colaboradorId,
         criadoPorNome: `${user.nome} ${user.sobrenome}`.trim(),
+        analistaId: null,
+        analistaNome: null,
         observacoesAnalise: "",
         avaliacao: null,
         historicoStatus: [
@@ -197,7 +217,7 @@ export default async (req: Request): Promise<Response> => {
       };
 
       if (input.action === "submit") {
-        validarEnvio(input, cartas.length, imagens.length);
+        validarEnvio(input, cartas.length);
         const dataEnvio = new Date().toISOString();
         // Missões aprovadas na mesma data geram conflito de agenda.
         const conflito = (await listAll<Missao>(STORES.missoes)).find(
@@ -239,6 +259,29 @@ export default async (req: Request): Promise<Response> => {
       const existing = await getById<Missao>(STORES.missoes, input.id);
       if (!existing) throw new HttpError(404, "Missão não encontrada.");
 
+      if (input.action === "marcarComprado") {
+        requirePerfil(user, ["Administrador", "Coordenador", "Financeiro"]);
+        if (!input.itemCompraId) throw new HttpError(400, "itemCompraId é obrigatório.");
+        if (!["Aprovada", "Aguardando Avaliação", "Finalizada"].includes(existing.status)) {
+          throw new HttpError(400, "Só é possível marcar itens comprados em missões já aprovadas.");
+        }
+        const itensCompra = existing.itensCompra.map((i) =>
+          i.id === input.itemCompraId ? { ...i, comprado: !!input.comprado } : i
+        );
+        const updadaComComprado: Missao = { ...existing, itensCompra, updatedAt: new Date().toISOString() };
+        await upsert(STORES.missoes, updadaComComprado);
+        await registrarLog({
+          entidadeTipo: "missao",
+          entidadeId: updadaComComprado.id,
+          entidadeNome: nomeLog(updadaComComprado),
+          acao: input.comprado ? "Item de compra marcado como comprado" : "Item de compra desmarcado",
+          detalhes: itensCompra.find((i) => i.id === input.itemCompraId)?.nome || "",
+          colaboradorId: user.colaboradorId,
+          colaboradorNome: user.nome,
+        });
+        return json(200, updadaComComprado);
+      }
+
       const isOwner = existing.criadoPorId === user.colaboradorId;
       const isAdmin = user.perfis.includes("Administrador");
       if (!isOwner && !isAdmin) throw new HttpError(403, "Você só pode editar missões que criou.");
@@ -264,6 +307,7 @@ export default async (req: Request): Promise<Response> => {
       const updated: Missao = {
         ...existing,
         nome: input.nome!.trim(),
+        tipo: input.tipo === "Semanal" ? "Semanal" : input.tipo === "Evento" ? "Evento" : existing.tipo || "Evento",
         data: input.data!,
         campoId: input.campoId!,
         resumo: input.resumo!.trim(),
@@ -278,7 +322,7 @@ export default async (req: Request): Promise<Response> => {
       };
 
       if (input.action === "submit") {
-        validarEnvio(input, cartas.length, imagens.length);
+        validarEnvio(input, cartas.length);
         const conflito = (await listAll<Missao>(STORES.missoes)).find(
           (m) => m.id !== updated.id && m.status === "Aprovada" && m.data === updated.data
         );

@@ -76,6 +76,11 @@ export default async (req: Request): Promise<Response> => {
       missao.observacoesAnalise = input.observacao?.trim() || "";
     }
 
+    if (input.action === "iniciar") {
+      missao.analistaId = user.colaboradorId;
+      missao.analistaNome = `${user.nome} ${user.sobrenome}`.trim();
+    }
+
     if (input.action === "avaliar") {
       missao.avaliacao = {
         estrelas: input.estrelas!,

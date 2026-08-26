@@ -7,8 +7,20 @@ import { api, ApiError } from "../../lib/api";
 import { useActionNotice } from "../../lib/ActionNoticeContext";
 import { buildMovimentacaoRows } from "../../lib/financeiroRows";
 import type { MovimentacaoRow } from "../../lib/financeiroRows";
-import { totalInvestimentos, totalCreditosItens, formatBRL, formatDate } from "../../../shared/calc";
-import type { ItemInvestimento, ItemCredito, LancamentoFinanceiro, Missao, StatusFinanceiro } from "../../../shared/types";
+import { totalInvestimentos, totalCreditosItens, totalPedidos, formatBRL, formatDate } from "../../../shared/calc";
+import { TAMANHOS_PEDIDO } from "../../../shared/types";
+import type {
+  ItemInvestimento,
+  ItemCredito,
+  ItemPedido,
+  TamanhoPedido,
+  Produto,
+  LancamentoFinanceiro,
+  Missao,
+  StatusFinanceiro,
+} from "../../../shared/types";
+
+type PedidoSortField = "nomeOperador" | "tamanho" | "produtoNome" | "quantidade" | "valorUnitario";
 
 const STATUS_OPCOES: StatusFinanceiro[] = ["Em Andamento", "Aprovação Pendente", "Financeiro Pendente"];
 
@@ -25,6 +37,7 @@ export default function MovimentacaoFinanceira() {
   const { notify } = useActionNotice();
   const [missoes, setMissoes] = useState<Missao[]>([]);
   const [lancamentos, setLancamentos] = useState<LancamentoFinanceiro[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,8 +58,12 @@ export default function MovimentacaoFinanceira() {
   const [investimentos, setInvestimentos] = useState<ItemInvestimento[]>([]);
   const [observacoesInvestimentos, setObservacoesInvestimentos] = useState("");
   const [creditos, setCreditos] = useState<ItemCredito[]>([]);
+  const [temPedido, setTemPedido] = useState(false);
+  const [pedidos, setPedidos] = useState<ItemPedido[]>([]);
+  const [pedidoSort, setPedidoSort] = useState<{ field: PedidoSortField; dir: "asc" | "desc" } | null>(null);
   const [saving, setSaving] = useState<"save" | "aprovacao" | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [marcandoComprado, setMarcandoComprado] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -67,6 +84,7 @@ export default function MovimentacaoFinanceira() {
 
   useEffect(() => {
     load();
+    api.get<Produto[]>("/produtos?apenasAtivos=1").then(setProdutos).catch(() => {});
   }, []);
 
   const todasLinhas = useMemo(() => buildMovimentacaoRows(missoes, lancamentos), [missoes, lancamentos]);
@@ -104,6 +122,9 @@ export default function MovimentacaoFinanceira() {
     setInvestimentos([]);
     setObservacoesInvestimentos("");
     setCreditos([]);
+    setTemPedido(false);
+    setPedidos([]);
+    setPedidoSort(null);
     setFormError(null);
   }
 
@@ -131,6 +152,8 @@ export default function MovimentacaoFinanceira() {
         setInvestimentos(l.investimentos);
         setObservacoesInvestimentos(l.observacoesInvestimentos);
         setCreditos(l.creditos);
+        setTemPedido(l.temPedido);
+        setPedidos(l.pedidos);
         if (l.tipo === "missao" && l.missaoId) {
           const m = missoes.find((x) => x.id === l.missaoId) || null;
           setFormMissao(m);
@@ -159,7 +182,10 @@ export default function MovimentacaoFinanceira() {
   }
 
   function addInvestimento() {
-    setInvestimentos((prev) => [...prev, { id: uuidv4(), nome: "", quantidade: 1, valorUnitario: 0 }]);
+    setInvestimentos((prev) => [
+      ...prev,
+      { id: uuidv4(), nome: "", quantidade: 1, valorUnitario: 0, data: "", recebido: false },
+    ]);
   }
   function updateInvestimento(id: string, patch: Partial<ItemInvestimento>) {
     setInvestimentos((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
@@ -169,7 +195,7 @@ export default function MovimentacaoFinanceira() {
   }
 
   function addCredito() {
-    setCreditos((prev) => [...prev, { id: uuidv4(), data: "", descricao: "", valor: 0 }]);
+    setCreditos((prev) => [...prev, { id: uuidv4(), data: "", descricao: "", valor: 0, recebido: false }]);
   }
   function updateCredito(id: string, patch: Partial<ItemCredito>) {
     setCreditos((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -178,11 +204,73 @@ export default function MovimentacaoFinanceira() {
     setCreditos((prev) => prev.filter((c) => c.id !== id));
   }
 
+  function addPedido() {
+    setPedidos((prev) => [
+      ...prev,
+      {
+        id: uuidv4(),
+        nomeOperador: "",
+        tamanho: "",
+        produtoId: "",
+        produtoNome: "",
+        quantidade: 1,
+        valorUnitario: 0,
+        recebido: false,
+      },
+    ]);
+  }
+  function updatePedido(id: string, patch: Partial<ItemPedido>) {
+    setPedidos((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }
+  function removePedido(id: string) {
+    setPedidos((prev) => prev.filter((p) => p.id !== id));
+  }
+  function togglePedidoSort(field: PedidoSortField) {
+    setPedidoSort((prev) => (prev?.field === field ? { field, dir: prev.dir === "asc" ? "desc" : "asc" } : { field, dir: "asc" }));
+  }
+  function pedidoArrow(field: PedidoSortField) {
+    return pedidoSort?.field === field ? (pedidoSort.dir === "asc" ? " ▲" : " ▼") : "";
+  }
+
+  const pedidosOrdenados = useMemo(() => {
+    if (!pedidoSort) return pedidos;
+    const { field, dir } = pedidoSort;
+    const copy = [...pedidos];
+    copy.sort((a, b) => {
+      const va = a[field];
+      const vb = b[field];
+      const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
+      return dir === "asc" ? cmp : -cmp;
+    });
+    return copy;
+  }, [pedidos, pedidoSort]);
+
   const totalInvest = totalInvestimentos(investimentos.filter((i) => i.nome.trim()));
   const totalCred = totalCreditosItens(creditos.filter((c) => c.valor > 0));
-  const saldo = totalCred - totalInvest;
+  const totalPedidosValor = totalPedidos(pedidos.filter((p) => p.nomeOperador.trim() && p.produtoId));
+  const totalRecebido = temPedido ? totalPedidosValor : totalCred;
+  const saldo = totalRecebido - totalInvest;
 
   const editavel = formStatus === "Em Andamento" || formStatus === "Financeiro Pendente";
+
+  async function marcarComprado(itemId: string, comprado: boolean) {
+    if (!formMissao) return;
+    setMarcandoComprado(itemId);
+    try {
+      const atualizada = await api.put<Missao>("/missoes", {
+        id: formMissao.id,
+        action: "marcarComprado",
+        itemCompraId: itemId,
+        comprado,
+      });
+      setFormMissao(atualizada);
+      setMissoes((prev) => prev.map((m) => (m.id === atualizada.id ? atualizada : m)));
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : "Erro ao marcar item como comprado.");
+    } finally {
+      setMarcandoComprado(null);
+    }
+  }
 
   async function salvar(action: "save" | "aprovacao") {
     setFormError(null);
@@ -193,9 +281,15 @@ export default function MovimentacaoFinanceira() {
     }
     const investLimpos = investimentos.filter((i) => i.nome.trim());
     const creditLimpos = creditos.filter((c) => c.valor > 0);
+    const pedidosLimpos = pedidos.filter((p) => p.nomeOperador.trim() && p.produtoId);
+    const usaPedido = formTipo === "projeto" && temPedido;
     if (action === "aprovacao") {
       if (investLimpos.length === 0) return setFormError("Informe ao menos um item de despesa.");
-      if (creditLimpos.length === 0) return setFormError("Informe ao menos uma linha de créditos.");
+      if (usaPedido) {
+        if (pedidosLimpos.length === 0) return setFormError("Informe ao menos um pedido.");
+      } else if (creditLimpos.length === 0) {
+        return setFormError("Informe ao menos uma linha de créditos.");
+      }
     }
 
     setSaving(action);
@@ -210,6 +304,8 @@ export default function MovimentacaoFinanceira() {
         investimentos: investLimpos,
         observacoesInvestimentos,
         creditos: creditLimpos,
+        temPedido: usaPedido,
+        pedidos: usaPedido ? pedidosLimpos : [],
         action,
       };
       let saved: LancamentoFinanceiro;
@@ -319,7 +415,9 @@ export default function MovimentacaoFinanceira() {
                       <td>{r.colaboradorNome}</td>
                       <td>{r.quantidadeOperadores ?? "—"}</td>
                       <td>{r.operadoresPresentes ?? "—"}</td>
-                      <td>{formatBRL(r.fechamento)}</td>
+                      <td style={{ color: r.fechamento >= 0 ? "var(--green)" : "var(--red)", fontWeight: 700 }}>
+                        {formatBRL(r.fechamento)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -362,6 +460,12 @@ export default function MovimentacaoFinanceira() {
                     <input type="date" value={dataFinal} onChange={(e) => setDataFinal(e.target.value)} required />
                   </Field>
                 </div>
+                <Field label="Vai ter pedido?">
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, height: 38 }}>
+                    <input type="checkbox" checked={temPedido} onChange={(e) => setTemPedido(e.target.checked)} />
+                    Substitui o bloco Créditos por um bloco de Pedidos
+                  </label>
+                </Field>
               </>
             ) : (
               formMissao && (
@@ -379,33 +483,50 @@ export default function MovimentacaoFinanceira() {
 
             <h3 style={{ marginTop: 20 }}>Despesas</h3>
             {investimentos.map((i) => (
-              <div className="item-row" key={i.id}>
-                <Field label="Nome do item">
-                  <input type="text" value={i.nome} onChange={(e) => updateInvestimento(i.id, { nome: e.target.value })} />
-                </Field>
-                <Field label="Quantidade">
-                  <input
-                    type="number"
-                    min={0}
-                    value={i.quantidade}
-                    onChange={(e) => updateInvestimento(i.id, { quantidade: Number(e.target.value) })}
-                  />
-                </Field>
-                <Field label="Valor unitário">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={i.valorUnitario}
-                    onChange={(e) => updateInvestimento(i.id, { valorUnitario: Number(e.target.value) })}
-                  />
-                </Field>
-                <Field label="Total">
-                  <input type="text" readOnly value={formatBRL(i.quantidade * i.valorUnitario)} />
-                </Field>
-                <button type="button" className="btn btn-secondary" onClick={() => removeInvestimento(i.id)}>
-                  Remover
-                </button>
+              <div key={i.id} style={{ marginBottom: 14 }}>
+                <div className="item-row">
+                  <Field label="Nome do item">
+                    <input type="text" value={i.nome} onChange={(e) => updateInvestimento(i.id, { nome: e.target.value })} />
+                  </Field>
+                  <Field label="Quantidade">
+                    <input
+                      type="number"
+                      min={0}
+                      value={i.quantidade}
+                      onChange={(e) => updateInvestimento(i.id, { quantidade: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <Field label="Valor unitário">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={i.valorUnitario}
+                      onChange={(e) => updateInvestimento(i.id, { valorUnitario: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <Field label="Total">
+                    <input type="text" readOnly value={formatBRL(i.quantidade * i.valorUnitario)} />
+                  </Field>
+                  <button type="button" className="btn btn-secondary" onClick={() => removeInvestimento(i.id)}>
+                    Remover
+                  </button>
+                </div>
+                <div className="grid grid-2">
+                  <Field label="Data da despesa">
+                    <input type="date" value={i.data || ""} onChange={(e) => updateInvestimento(i.id, { data: e.target.value })} />
+                  </Field>
+                  <Field label="Recebido">
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, height: 38 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!i.recebido}
+                        onChange={(e) => updateInvestimento(i.id, { recebido: e.target.checked })}
+                      />
+                      Já recebido/pago
+                    </label>
+                  </Field>
+                </div>
               </div>
             ))}
             <button type="button" className="btn btn-secondary" onClick={addInvestimento}>
@@ -413,47 +534,183 @@ export default function MovimentacaoFinanceira() {
             </button>
             <div className="summary-box">
               <span>Total despesas</span>
-              <span className="value">{formatBRL(totalInvest)}</span>
+              <span className="value" style={{ color: "var(--orange)" }}>{formatBRL(totalInvest)}</span>
             </div>
             <Field label="Observações">
               <textarea value={observacoesInvestimentos} onChange={(e) => setObservacoesInvestimentos(e.target.value)} rows={2} />
             </Field>
 
-            <h3 style={{ marginTop: 20 }}>Créditos</h3>
-            {creditos.map((c) => (
-              <div className="item-row" key={c.id}>
-                <Field label="Data do recebimento">
-                  <input type="date" value={c.data} onChange={(e) => updateCredito(c.id, { data: e.target.value })} />
-                </Field>
-                <Field label="Descrição">
-                  <input type="text" value={c.descricao} onChange={(e) => updateCredito(c.id, { descricao: e.target.value })} />
-                </Field>
-                <Field label="Valor recebido">
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={c.valor}
-                    onChange={(e) => updateCredito(c.id, { valor: Number(e.target.value) })}
-                  />
-                </Field>
-                <button type="button" className="btn btn-secondary" onClick={() => removeCredito(c.id)}>
-                  Remover
+            {formTipo === "projeto" && temPedido ? (
+              <>
+                <h3 style={{ marginTop: 20 }}>Pedidos</h3>
+                {pedidos.length === 0 ? (
+                  <p className="hint">Nenhum pedido adicionado ainda.</p>
+                ) : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => togglePedidoSort("nomeOperador")}>
+                            Nome do Operador{pedidoArrow("nomeOperador")}
+                          </th>
+                          <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => togglePedidoSort("tamanho")}>
+                            Tamanho{pedidoArrow("tamanho")}
+                          </th>
+                          <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => togglePedidoSort("produtoNome")}>
+                            Produto{pedidoArrow("produtoNome")}
+                          </th>
+                          <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => togglePedidoSort("quantidade")}>
+                            Quantidade{pedidoArrow("quantidade")}
+                          </th>
+                          <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => togglePedidoSort("valorUnitario")}>
+                            Valor unit.{pedidoArrow("valorUnitario")}
+                          </th>
+                          <th>Total</th>
+                          <th>Recebido</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pedidosOrdenados.map((p) => (
+                          <tr key={p.id}>
+                            <td>
+                              <input
+                                type="text"
+                                value={p.nomeOperador}
+                                onChange={(e) => updatePedido(p.id, { nomeOperador: e.target.value })}
+                              />
+                            </td>
+                            <td>
+                              <select
+                                value={p.tamanho}
+                                onChange={(e) => updatePedido(p.id, { tamanho: e.target.value as TamanhoPedido | "" })}
+                              >
+                                <option value="">—</option>
+                                {TAMANHOS_PEDIDO.map((t) => (
+                                  <option key={t} value={t}>
+                                    {t}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td>
+                              <select
+                                value={p.produtoId}
+                                onChange={(e) => {
+                                  const prod = produtos.find((x) => x.id === e.target.value);
+                                  updatePedido(p.id, { produtoId: e.target.value, produtoNome: prod?.nome || "" });
+                                }}
+                              >
+                                <option value="">Selecione</option>
+                                {produtos.map((prod) => (
+                                  <option key={prod.id} value={prod.id}>
+                                    {prod.nome}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min={0}
+                                value={p.quantidade}
+                                onChange={(e) => updatePedido(p.id, { quantidade: Number(e.target.value) })}
+                                style={{ width: 70 }}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={p.valorUnitario}
+                                onChange={(e) => updatePedido(p.id, { valorUnitario: Number(e.target.value) })}
+                                style={{ width: 90 }}
+                              />
+                            </td>
+                            <td>{formatBRL(p.quantidade * p.valorUnitario)}</td>
+                            <td style={{ textAlign: "center" }}>
+                              <input
+                                type="checkbox"
+                                checked={!!p.recebido}
+                                onChange={(e) => updatePedido(p.id, { recebido: e.target.checked })}
+                              />
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="link-btn"
+                                style={{ color: "#ff8080" }}
+                                onClick={() => removePedido(p.id)}
+                              >
+                                Remover
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <button type="button" className="btn btn-secondary" onClick={addPedido} style={{ marginTop: 10 }}>
+                  + Adicionar pedido
                 </button>
-              </div>
-            ))}
-            <button type="button" className="btn btn-secondary" onClick={addCredito}>
-              + Adicionar crédito
-            </button>
-            <div className="summary-box">
-              <span>Total créditos</span>
-              <span className="value">{formatBRL(totalCred)}</span>
-            </div>
+                <div className="summary-box" style={{ marginTop: 10 }}>
+                  <span>Total de pedidos</span>
+                  <span className="value" style={{ color: "var(--blue)" }}>{formatBRL(totalPedidosValor)}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 style={{ marginTop: 20 }}>Créditos</h3>
+                {creditos.map((c) => (
+                  <div className="item-row" key={c.id}>
+                    <Field label="Data do recebimento">
+                      <input type="date" value={c.data} onChange={(e) => updateCredito(c.id, { data: e.target.value })} />
+                    </Field>
+                    <Field label="Descrição">
+                      <input type="text" value={c.descricao} onChange={(e) => updateCredito(c.id, { descricao: e.target.value })} />
+                    </Field>
+                    <Field label="Valor recebido">
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={c.valor}
+                        onChange={(e) => updateCredito(c.id, { valor: Number(e.target.value) })}
+                      />
+                    </Field>
+                    <Field label="Recebido">
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, height: 38 }}>
+                        <input
+                          type="checkbox"
+                          checked={!!c.recebido}
+                          onChange={(e) => updateCredito(c.id, { recebido: e.target.checked })}
+                        />
+                        Confirmado
+                      </label>
+                    </Field>
+                    <button type="button" className="btn btn-secondary" onClick={() => removeCredito(c.id)}>
+                      Remover
+                    </button>
+                  </div>
+                ))}
+                <button type="button" className="btn btn-secondary" onClick={addCredito}>
+                  + Adicionar crédito
+                </button>
+                <div className="summary-box">
+                  <span>Total créditos</span>
+                  <span className="value" style={{ color: "var(--blue)" }}>{formatBRL(totalCred)}</span>
+                </div>
+              </>
+            )}
 
             <h3 style={{ marginTop: 20 }}>Fechamento</h3>
             <div className="summary-box" style={{ borderColor: "var(--gold-dim)" }}>
-              <span>Saldo (créditos − despesas)</span>
-              <span className="value">{formatBRL(saldo)}</span>
+              <span>Saldo ({formTipo === "projeto" && temPedido ? "pedidos" : "créditos"} − despesas)</span>
+              <span className="value" style={{ color: saldo >= 0 ? "var(--green)" : "var(--red)" }}>
+                {formatBRL(saldo)}
+              </span>
             </div>
 
             {editavel && (
@@ -467,6 +724,56 @@ export default function MovimentacaoFinanceira() {
               </div>
             )}
           </fieldset>
+
+          {formTipo === "missao" && formMissao && formMissao.itensCompra.length > 0 && (
+            <>
+              <h3 style={{ marginTop: 20 }}>Itens de compra da missão</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Qtd</th>
+                      <th>Valor unit.</th>
+                      <th>Total</th>
+                      <th>Link de compra</th>
+                      <th>Comprado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formMissao.itensCompra.map((i) => (
+                      <tr key={i.id}>
+                        <td>{i.nome}</td>
+                        <td>{i.quantidade}</td>
+                        <td>{formatBRL(i.valorUnitario)}</td>
+                        <td>{formatBRL(i.quantidade * i.valorUnitario)}</td>
+                        <td>
+                          {i.link ? (
+                            <a href={i.link} target="_blank" rel="noreferrer">
+                              Abrir link
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={!!i.comprado}
+                            disabled={marcandoComprado === i.id}
+                            onChange={(e) => marcarComprado(i.id, e.target.checked)}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="hint">
+                Marque os itens conforme forem comprados. Isso não depende do status do lançamento.
+              </p>
+            </>
+          )}
 
           {formObservacaoAprovacao && (
             <>

@@ -4,7 +4,7 @@ import { Field, Banner } from "../../components/Field";
 import { StatusFinanceiroBadge } from "../../components/StatusBadge";
 import { api, ApiError } from "../../lib/api";
 import { useActionNotice } from "../../lib/ActionNoticeContext";
-import { totalInvestimentos, totalCreditosItens, resultadoLancamento, formatBRL, formatDate } from "../../../shared/calc";
+import { totalInvestimentos, totalRecebidoLancamento, resultadoLancamento, formatBRL, formatDate } from "../../../shared/calc";
 import type { LancamentoFinanceiro, Missao } from "../../../shared/types";
 
 export default function AprovacaoFinanceira() {
@@ -118,7 +118,9 @@ export default function AprovacaoFinanceira() {
                     <td>{l.tipo === "missao" ? "Missão" : "Projeto"}</td>
                     <td>{titulo(l)}</td>
                     <td>{formatDate(l.createdAt)}</td>
-                    <td>{formatBRL(resultadoLancamento(l))}</td>
+                    <td style={{ color: resultadoLancamento(l) >= 0 ? "var(--green)" : "var(--red)", fontWeight: 700 }}>
+                      {formatBRL(resultadoLancamento(l))}
+                    </td>
                     <td>{l.criadoPorNome}</td>
                     <td>{qtdeOperadores(l) ?? "—"}</td>
                   </tr>
@@ -138,16 +140,21 @@ export default function AprovacaoFinanceira() {
 
           <div className="grid grid-3">
             <div className="summary-box">
-              <span>Créditos</span>
-              <span className="value">{formatBRL(totalCreditosItens(selecionado.creditos))}</span>
+              <span>{selecionado.temPedido ? "Pedidos" : "Créditos"}</span>
+              <span className="value" style={{ color: "var(--blue)" }}>{formatBRL(totalRecebidoLancamento(selecionado))}</span>
             </div>
             <div className="summary-box">
               <span>Despesas</span>
-              <span className="value">{formatBRL(totalInvestimentos(selecionado.investimentos))}</span>
+              <span className="value" style={{ color: "var(--orange)" }}>{formatBRL(totalInvestimentos(selecionado.investimentos))}</span>
             </div>
             <div className="summary-box">
               <span>Resultado</span>
-              <span className="value">{formatBRL(resultadoLancamento(selecionado))}</span>
+              <span
+                className="value"
+                style={{ color: resultadoLancamento(selecionado) >= 0 ? "var(--green)" : "var(--red)" }}
+              >
+                {formatBRL(resultadoLancamento(selecionado))}
+              </span>
             </div>
           </div>
 
@@ -175,27 +182,61 @@ export default function AprovacaoFinanceira() {
             </table>
           </div>
 
-          <h3 style={{ marginTop: 16 }}>Créditos</h3>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Descrição</th>
-                  <th>Valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selecionado.creditos.map((c) => (
-                  <tr key={c.id}>
-                    <td>{formatDate(c.data)}</td>
-                    <td>{c.descricao}</td>
-                    <td>{formatBRL(c.valor)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {selecionado.temPedido ? (
+            <>
+              <h3 style={{ marginTop: 16 }}>Pedidos</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nome do Operador</th>
+                      <th>Tamanho</th>
+                      <th>Produto</th>
+                      <th>Qtd</th>
+                      <th>Valor unit.</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selecionado.pedidos.map((p) => (
+                      <tr key={p.id}>
+                        <td>{p.nomeOperador}</td>
+                        <td>{p.tamanho || "—"}</td>
+                        <td>{p.produtoNome}</td>
+                        <td>{p.quantidade}</td>
+                        <td>{formatBRL(p.valorUnitario)}</td>
+                        <td>{formatBRL(p.quantidade * p.valorUnitario)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 style={{ marginTop: 16 }}>Créditos</h3>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Descrição</th>
+                      <th>Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selecionado.creditos.map((c) => (
+                      <tr key={c.id}>
+                        <td>{formatDate(c.data)}</td>
+                        <td>{c.descricao}</td>
+                        <td>{formatBRL(c.valor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
           <Field label="Observações" required={podeAgir} hint="Obrigatório para aprovar ou reprovar.">
             <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} rows={3} disabled={!podeAgir} />

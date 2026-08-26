@@ -247,6 +247,18 @@ button {
   margin-bottom: 14px;
 }
 
+/* Caixa Geral — saldo acima de R$ 8.000 (Leva 15): brilho verde sutil +
+   emoji de comemoração no valor, sem reproduzir nenhuma marca real. */
+.saldo-comemoracao {
+  border-color: var(--green);
+  animation: saldo-glow 2.2s ease-in-out infinite;
+}
+
+@keyframes saldo-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(47, 168, 79, 0); }
+  50% { box-shadow: 0 0 18px rgba(47, 168, 79, 0.45); }
+}
+
 .grid {
   display: grid;
   gap: 14px;

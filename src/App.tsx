@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import Colaboradores from "./pages/cadastros/Colaboradores";
 import Campos from "./pages/cadastros/Campos";
 import Operadores from "./pages/cadastros/Operadores";
+import Produtos from "./pages/cadastros/Produtos";
 import ResetSistema from "./pages/cadastros/ResetSistema";
 import NovaMissao from "./pages/missoes/NovaMissao";
 import ConsultaMissoes from "./pages/missoes/ConsultaMissoes";
@@ -61,6 +62,10 @@ export default function App() {
       <Route
         path="/cadastros/operadores"
         element={<Protected perfis={["Administrador"]}>{<Operadores />}</Protected>}
+      />
+      <Route
+        path="/cadastros/produtos"
+        element={<Protected perfis={["Administrador"]}>{<Produtos />}</Protected>}
       />
       <Route
         path="/cadastros/reset"

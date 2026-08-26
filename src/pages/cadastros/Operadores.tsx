@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
 import { api, ApiError } from "../../lib/api";
 import { useActionNotice } from "../../lib/ActionNoticeContext";
+import { formatDate } from "../../../shared/calc";
 import { GRUPOS_WHATSAPP, PATCHES } from "../../../shared/types";
-import type { GrupoWhatsapp, Patch, Operador } from "../../../shared/types";
+import type { GrupoWhatsapp, Patch, Operador, HistoricoOperadorEntry } from "../../../shared/types";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -48,9 +50,13 @@ const EMPTY = {
   patch: "" as Patch | "",
   operadorMilsim: false,
   numeroMilsim: "",
-  historico: "",
+  historico: [] as HistoricoOperadorEntry[],
   status: "Ativo" as "Ativo" | "Inativo",
 };
+
+function hojeISO() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export default function Operadores() {
   const { notify } = useActionNotice();
@@ -61,6 +67,8 @@ export default function Operadores() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [novoHistoricoData, setNovoHistoricoData] = useState(hojeISO());
+  const [novoHistoricoTexto, setNovoHistoricoTexto] = useState("");
 
   async function load() {
     setLoading(true);
@@ -82,6 +90,22 @@ export default function Operadores() {
     setEditingId(null);
     setFormOpen(true);
     setError(null);
+    setNovoHistoricoData(hojeISO());
+    setNovoHistoricoTexto("");
+  }
+
+  function adicionarHistorico() {
+    if (!novoHistoricoTexto.trim() || !novoHistoricoData) return;
+    const entrada: HistoricoOperadorEntry = {
+      id: uuidv4(),
+      data: novoHistoricoData,
+      texto: novoHistoricoTexto.trim(),
+      registradoPorNome: "",
+      criadoEm: "",
+    };
+    setForm((f) => ({ ...f, historico: [entrada, ...f.historico] }));
+    setNovoHistoricoTexto("");
+    setNovoHistoricoData(hojeISO());
   }
 
   function editar(o: Operador) {
@@ -97,12 +121,14 @@ export default function Operadores() {
       patch: o.patch || "",
       operadorMilsim: o.operadorMilsim,
       numeroMilsim: o.numeroMilsim || "",
-      historico: o.historico || "",
+      historico: o.historico || [],
       status: o.status,
     });
     setEditingId(o.id);
     setFormOpen(true);
     setError(null);
+    setNovoHistoricoData(hojeISO());
+    setNovoHistoricoTexto("");
   }
 
   async function salvar(e: React.FormEvent) {
@@ -297,13 +323,60 @@ export default function Operadores() {
                 </Field>
               )}
             </div>
-            <Field label="Histórico">
-              <textarea
-                value={form.historico}
-                onChange={(e) => setForm({ ...form, historico: e.target.value })}
-                rows={3}
-              />
-            </Field>
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ display: "block", marginBottom: 8, fontWeight: 600 }}>Histórico do operador</label>
+              <div className="grid grid-2">
+                <Field label="Data">
+                  <input
+                    type="date"
+                    value={novoHistoricoData}
+                    onChange={(e) => setNovoHistoricoData(e.target.value)}
+                  />
+                </Field>
+                <Field label="Histórico">
+                  <input
+                    type="text"
+                    value={novoHistoricoTexto}
+                    onChange={(e) => setNovoHistoricoTexto(e.target.value)}
+                    placeholder="Ex.: advertência, elogio, ocorrência…"
+                  />
+                </Field>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={adicionarHistorico}
+                disabled={!novoHistoricoTexto.trim() || !novoHistoricoData}
+              >
+                + Adicionar ao histórico
+              </button>
+              {form.historico.length > 0 && (
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Data</th>
+                        <th>Histórico</th>
+                        <th>Registrado por</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {form.historico.map((h) => (
+                        <tr key={h.id}>
+                          <td>{formatDate(h.data)}</td>
+                          <td>{h.texto}</td>
+                          <td>{h.registradoPorNome || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p style={{ marginTop: 6, fontSize: 11, color: "var(--text-faint)" }}>
+                Cada entrada fica salva pra sempre no cadastro deste operador — não é possível editar ou apagar um
+                registro já adicionado, só incluir novos.
+              </p>
+            </div>
             <Field label="Status" required>
               <select
                 value={form.status}
