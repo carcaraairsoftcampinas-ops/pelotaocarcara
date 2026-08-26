@@ -10,6 +10,7 @@ const NOMES_STORE: Record<string, string> = {
   colaboradores: "Colaboradores",
   campos: "Campos",
   operadores: "Operadores",
+  produtos: "Produtos",
   missoes: "Missões",
   financeiro: "Lançamentos financeiros",
   counters: "Contadores de numeração",
@@ -104,6 +105,10 @@ export default function ResetSistema() {
         <p>
           <strong>Não pode ser desfeito.</strong> Use só se quiser limpar dados de teste antes de colocar o
           sistema pra valer com o time.
+        </p>
+        <p className="hint">
+          Os backups (tela "Backup") não são apagados pelo Reset — se o reset foi engano, dá pra restaurar um
+          backup anterior depois.
         </p>
         <Field label={`Digite "${FRASE_CONFIRMACAO}" para habilitar o botão`} required>
           <input type="text" value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={FRASE_CONFIRMACAO} />

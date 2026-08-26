@@ -3,10 +3,14 @@ import { v4 as uuidv4 } from "uuid";
 import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
 import { StatusFinanceiroBadge } from "../../components/StatusBadge";
+import { SortableTh } from "../../components/SortableTh";
+import { useSort } from "../../lib/useSort";
 import { api, ApiError } from "../../lib/api";
 import { useActionNotice } from "../../lib/ActionNoticeContext";
 import { buildMovimentacaoRows } from "../../lib/financeiroRows";
 import type { MovimentacaoRow } from "../../lib/financeiroRows";
+
+type LinhaSortField = "status" | "origem" | "nome" | "data" | "colaborador" | "operadores" | "presentes" | "fechamento";
 import { totalInvestimentos, totalCreditosItens, totalPedidos, formatBRL, formatDate } from "../../../shared/calc";
 import { TAMANHOS_PEDIDO } from "../../../shared/types";
 import type {
@@ -43,6 +47,7 @@ export default function MovimentacaoFinanceira() {
 
   const [filtros, setFiltros] = useState(EMPTY_FILTROS);
   const [filtrosAplicados, setFiltrosAplicados] = useState(EMPTY_FILTROS);
+  const { sort: linhaSort, toggleSort: toggleLinhaSort, ordenar: ordenarLinhas } = useSort<LinhaSortField>();
 
   // --- formulário (Lançar Projeto / iniciar ou editar lançamento de missão) ---
   const [formOpen, setFormOpen] = useState(false);
@@ -109,6 +114,32 @@ export default function MovimentacaoFinanceira() {
   function pesquisar() {
     setFiltrosAplicados(filtros);
   }
+
+  function valorOrdenavelLinha(r: MovimentacaoRow, field: LinhaSortField): string | number {
+    switch (field) {
+      case "status":
+        return r.status;
+      case "origem":
+        return r.origem;
+      case "nome":
+        return r.nome;
+      case "data":
+        return r.data;
+      case "colaborador":
+        return r.colaboradorNome;
+      case "operadores":
+        return r.quantidadeOperadores ?? -1;
+      case "presentes":
+        return r.operadoresPresentes ?? -1;
+      case "fechamento":
+        return r.fechamento;
+    }
+  }
+
+  const linhasOrdenadas = useMemo(
+    () => ordenarLinhas(linhasFiltradas, valorOrdenavelLinha),
+    [linhasFiltradas, linhaSort]
+  );
 
   function resetForm() {
     setFormId(null);
@@ -272,25 +303,43 @@ export default function MovimentacaoFinanceira() {
     }
   }
 
+  function camposFaltando(action: "save" | "aprovacao"): string[] {
+    const faltando: string[] = [];
+    if (formTipo === "projeto") {
+      if (!nomeProjeto.trim()) faltando.push("Nome do Projeto");
+      if (!dataInicio) faltando.push("Data Início");
+      if (!dataFinal) faltando.push("Data Final");
+    }
+    if (action === "aprovacao") {
+      const investLimpos = investimentos.filter((i) => i.nome.trim());
+      const creditLimpos = creditos.filter((c) => c.valor > 0);
+      const pedidosLimpos = pedidos.filter((p) => p.nomeOperador.trim() && p.produtoId);
+      const usaPedido = formTipo === "projeto" && temPedido;
+      const temDespesa = investLimpos.length > 0;
+      const temRecebimento = usaPedido ? pedidosLimpos.length > 0 : creditLimpos.length > 0;
+      // Só precisa ter UMA despesa OU UM crédito/pedido — não é obrigatório ter os dois.
+      if (!temDespesa && !temRecebimento) {
+        faltando.push(usaPedido ? "Ao menos uma Despesa ou um Pedido" : "Ao menos uma Despesa ou um Crédito");
+      }
+    }
+    return faltando;
+  }
+
   async function salvar(action: "save" | "aprovacao") {
     setFormError(null);
-    if (formTipo === "projeto") {
-      if (!nomeProjeto.trim()) return setFormError("Nome do Projeto é obrigatório.");
-      if (!dataInicio) return setFormError("Data Início é obrigatória.");
-      if (!dataFinal) return setFormError("Data Final é obrigatória.");
+    const faltando = camposFaltando(action);
+    if (faltando.length > 0) {
+      notify(
+        `Preencha os campos obrigatórios antes de ${
+          action === "aprovacao" ? "enviar para Aprovação Financeira" : "salvar"
+        }:\n\n${faltando.map((f) => `• ${f}`).join("\n")}`
+      );
+      return;
     }
     const investLimpos = investimentos.filter((i) => i.nome.trim());
     const creditLimpos = creditos.filter((c) => c.valor > 0);
     const pedidosLimpos = pedidos.filter((p) => p.nomeOperador.trim() && p.produtoId);
     const usaPedido = formTipo === "projeto" && temPedido;
-    if (action === "aprovacao") {
-      if (investLimpos.length === 0) return setFormError("Informe ao menos um item de despesa.");
-      if (usaPedido) {
-        if (pedidosLimpos.length === 0) return setFormError("Informe ao menos um pedido.");
-      } else if (creditLimpos.length === 0) {
-        return setFormError("Informe ao menos uma linha de créditos.");
-      }
-    }
 
     setSaving(action);
     try {
@@ -393,18 +442,18 @@ export default function MovimentacaoFinanceira() {
               <table>
                 <thead>
                   <tr>
-                    <th>Status</th>
-                    <th>Origem</th>
-                    <th>Nome</th>
-                    <th>Data</th>
-                    <th>Colaborador</th>
-                    <th>Qtde Operadores</th>
-                    <th>Operadores Presentes</th>
-                    <th>Fechamento</th>
+                    <SortableTh field="status" sort={linhaSort} onSort={toggleLinhaSort}>Status</SortableTh>
+                    <SortableTh field="origem" sort={linhaSort} onSort={toggleLinhaSort}>Origem</SortableTh>
+                    <SortableTh field="nome" sort={linhaSort} onSort={toggleLinhaSort}>Nome</SortableTh>
+                    <SortableTh field="data" sort={linhaSort} onSort={toggleLinhaSort}>Data</SortableTh>
+                    <SortableTh field="colaborador" sort={linhaSort} onSort={toggleLinhaSort}>Colaborador</SortableTh>
+                    <SortableTh field="operadores" sort={linhaSort} onSort={toggleLinhaSort}>Qtde Operadores</SortableTh>
+                    <SortableTh field="presentes" sort={linhaSort} onSort={toggleLinhaSort}>Operadores Presentes</SortableTh>
+                    <SortableTh field="fechamento" sort={linhaSort} onSort={toggleLinhaSort}>Fechamento</SortableTh>
                   </tr>
                 </thead>
                 <tbody>
-                  {linhasFiltradas.map((r) => (
+                  {linhasOrdenadas.map((r) => (
                     <tr key={r.key} style={{ cursor: "pointer" }} onClick={() => abrirLinha(r)}>
                       <td>
                         <StatusFinanceiroBadge status={r.status} />
@@ -760,7 +809,7 @@ export default function MovimentacaoFinanceira() {
                           <input
                             type="checkbox"
                             checked={!!i.comprado}
-                            disabled={marcandoComprado === i.id}
+                            disabled={marcandoComprado === i.id || formMissao.status === "Finalizada"}
                             onChange={(e) => marcarComprado(i.id, e.target.checked)}
                           />
                         </td>
@@ -770,7 +819,9 @@ export default function MovimentacaoFinanceira() {
                 </table>
               </div>
               <p className="hint">
-                Marque os itens conforme forem comprados. Isso não depende do status do lançamento.
+                {formMissao.status === "Finalizada"
+                  ? "Missão Finalizada — os itens de compra não podem mais ser alterados."
+                  : "Marque os itens conforme forem comprados. Isso não depende do status do lançamento."}
               </p>
             </>
           )}

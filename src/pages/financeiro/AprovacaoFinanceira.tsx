@@ -1,11 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
 import { StatusFinanceiroBadge } from "../../components/StatusBadge";
+import { SortableTh } from "../../components/SortableTh";
+import { useSort } from "../../lib/useSort";
 import { api, ApiError } from "../../lib/api";
 import { useActionNotice } from "../../lib/ActionNoticeContext";
 import { totalInvestimentos, totalRecebidoLancamento, resultadoLancamento, formatBRL, formatDate } from "../../../shared/calc";
 import type { LancamentoFinanceiro, Missao } from "../../../shared/types";
+
+type SortField = "status" | "origem" | "nome" | "data" | "resultado" | "criadoPor" | "operadores";
 
 export default function AprovacaoFinanceira() {
   const { notify } = useActionNotice();
@@ -16,6 +20,7 @@ export default function AprovacaoFinanceira() {
   const [selecionado, setSelecionado] = useState<LancamentoFinanceiro | null>(null);
   const [observacao, setObservacao] = useState("");
   const [acting, setActing] = useState<string | null>(null);
+  const { sort, toggleSort, ordenar } = useSort<SortField>();
 
   async function load() {
     setLoading(true);
@@ -47,7 +52,9 @@ export default function AprovacaoFinanceira() {
   async function agir(action: "aprovar" | "reprovar") {
     if (!selecionado) return;
     if (!observacao.trim()) {
-      setError("Preencha o campo Observações antes de aprovar ou reprovar.");
+      notify(
+        `Preencha os campos obrigatórios antes de ${action === "aprovar" ? "aprovar" : "reprovar"}:\n\n• Observações`
+      );
       return;
     }
     if (!confirm(`Confirma a ação "${action === "aprovar" ? "aprovar" : "reprovar"}" para este lançamento?`)) return;
@@ -85,6 +92,27 @@ export default function AprovacaoFinanceira() {
 
   const podeAgir = selecionado?.status === "Aprovação Pendente";
 
+  function valorOrdenavel(l: LancamentoFinanceiro, field: SortField): string | number {
+    switch (field) {
+      case "status":
+        return l.status;
+      case "origem":
+        return l.tipo;
+      case "nome":
+        return titulo(l);
+      case "data":
+        return l.createdAt;
+      case "resultado":
+        return resultadoLancamento(l);
+      case "criadoPor":
+        return l.criadoPorNome;
+      case "operadores":
+        return qtdeOperadores(l) ?? -1;
+    }
+  }
+
+  const listaOrdenada = useMemo(() => ordenar(lista, valorOrdenavel), [lista, sort, missoes]);
+
   return (
     <div>
       <PageHeader crumbs="Financeiro" title="Aprovação Financeira" />
@@ -100,17 +128,17 @@ export default function AprovacaoFinanceira() {
             <table>
               <thead>
                 <tr>
-                  <th>Status</th>
-                  <th>Origem</th>
-                  <th>Nome</th>
-                  <th>Data</th>
-                  <th>Resultado</th>
-                  <th>Criado por</th>
-                  <th>Qtde Operadores</th>
+                  <SortableTh field="status" sort={sort} onSort={toggleSort}>Status</SortableTh>
+                  <SortableTh field="origem" sort={sort} onSort={toggleSort}>Origem</SortableTh>
+                  <SortableTh field="nome" sort={sort} onSort={toggleSort}>Nome</SortableTh>
+                  <SortableTh field="data" sort={sort} onSort={toggleSort}>Data</SortableTh>
+                  <SortableTh field="resultado" sort={sort} onSort={toggleSort}>Resultado</SortableTh>
+                  <SortableTh field="criadoPor" sort={sort} onSort={toggleSort}>Criado por</SortableTh>
+                  <SortableTh field="operadores" sort={sort} onSort={toggleSort}>Qtde Operadores</SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {lista.map((l) => (
+                {listaOrdenada.map((l) => (
                   <tr key={l.id} style={{ cursor: "pointer" }} onClick={() => abrir(l)}>
                     <td>
                       <StatusFinanceiroBadge status={l.status} />

@@ -1,9 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
+import { SortableTh } from "../../components/SortableTh";
+import { useSort } from "../../lib/useSort";
 import { api, ApiError } from "../../lib/api";
 import { GRUPOS_WHATSAPP, PATCHES } from "../../../shared/types";
 import type { Operador } from "../../../shared/types";
+
+type SortField =
+  | "id"
+  | "nome"
+  | "nomeNaLista"
+  | "aniversario"
+  | "email"
+  | "telefone"
+  | "grupoWhatsapp"
+  | "patch"
+  | "milsim"
+  | "status";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -46,6 +60,7 @@ export default function ListaOperadores() {
   const [error, setError] = useState<string | null>(null);
   const [filtros, setFiltros] = useState(EMPTY_FILTROS);
   const [filtrosAplicados, setFiltrosAplicados] = useState(EMPTY_FILTROS);
+  const { sort, toggleSort, ordenar } = useSort<SortField>();
 
   async function load() {
     setLoading(true);
@@ -77,6 +92,35 @@ export default function ListaOperadores() {
       .filter((o) => (f.patch ? o.patch === f.patch : true))
       .filter((o) => (f.operadorMilsim ? o.operadorMilsim === (f.operadorMilsim === "Sim") : true));
   }, [lista, filtrosAplicados]);
+
+  function valorOrdenavel(o: Operador, field: SortField): string | number {
+    switch (field) {
+      case "id":
+        return o.id;
+      case "nome":
+        return `${o.nome} ${o.sobrenome}`;
+      case "nomeNaLista":
+        return o.nomeNaLista;
+      case "aniversario":
+        return o.aniversarioMes != null && o.aniversarioDia != null
+          ? o.aniversarioMes * 100 + o.aniversarioDia
+          : -1;
+      case "email":
+        return o.email;
+      case "telefone":
+        return o.telefone;
+      case "grupoWhatsapp":
+        return o.grupoWhatsapp || "";
+      case "patch":
+        return o.patch || "";
+      case "milsim":
+        return o.numeroMilsim || "";
+      case "status":
+        return o.status;
+    }
+  }
+
+  const listaOrdenada = useMemo(() => ordenar(listaFiltrada, valorOrdenavel), [listaFiltrada, sort]);
 
   return (
     <div>
@@ -143,20 +187,20 @@ export default function ListaOperadores() {
             <table>
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Nome</th>
-                  <th>Nome na lista</th>
-                  <th>Aniversário</th>
-                  <th>E-mail</th>
-                  <th>Telefone</th>
-                  <th>Grupo WhatsApp</th>
-                  <th>Patch</th>
-                  <th>Milsim</th>
-                  <th>Status</th>
+                  <SortableTh field="id" sort={sort} onSort={toggleSort}>ID</SortableTh>
+                  <SortableTh field="nome" sort={sort} onSort={toggleSort}>Nome</SortableTh>
+                  <SortableTh field="nomeNaLista" sort={sort} onSort={toggleSort}>Nome na lista</SortableTh>
+                  <SortableTh field="aniversario" sort={sort} onSort={toggleSort}>Aniversário</SortableTh>
+                  <SortableTh field="email" sort={sort} onSort={toggleSort}>E-mail</SortableTh>
+                  <SortableTh field="telefone" sort={sort} onSort={toggleSort}>Telefone</SortableTh>
+                  <SortableTh field="grupoWhatsapp" sort={sort} onSort={toggleSort}>Grupo WhatsApp</SortableTh>
+                  <SortableTh field="patch" sort={sort} onSort={toggleSort}>Patch</SortableTh>
+                  <SortableTh field="milsim" sort={sort} onSort={toggleSort}>Milsim</SortableTh>
+                  <SortableTh field="status" sort={sort} onSort={toggleSort}>Status</SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {listaFiltrada.map((o) => (
+                {listaOrdenada.map((o) => (
                   <tr key={o.id}>
                     <td>{o.id}</td>
                     <td>

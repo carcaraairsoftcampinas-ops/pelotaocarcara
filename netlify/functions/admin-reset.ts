@@ -31,6 +31,9 @@ export default async (req: Request): Promise<Response> => {
 
     const apagados: Record<string, number> = {};
     for (const nome of Object.values(STORES)) {
+      // Backups não são apagados pelo Reset — é justamente o que permite
+      // restaurar os dados caso o Reset tenha sido um erro.
+      if (nome === STORES.backups) continue;
       apagados[nome] = await wipeStore(nome);
     }
 

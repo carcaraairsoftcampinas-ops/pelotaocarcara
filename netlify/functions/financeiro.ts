@@ -66,21 +66,23 @@ function validarDados(input: LancamentoInput) {
   }
 }
 
+// Pra enviar pra Aprovação Financeira basta ter UMA despesa OU UM
+// crédito/pedido lançado — não é mais obrigatório ter os dois ao mesmo tempo.
 function validarAprovacao(
   investimentos: ItemInvestimento[],
   creditos: ItemCredito[],
   temPedido: boolean,
   pedidos: ItemPedido[]
 ) {
-  if (investimentos.length === 0) {
-    throw new HttpError(400, "Informe ao menos um item de despesa antes de enviar para aprovação.");
-  }
-  if (temPedido) {
-    if (pedidos.length === 0) {
-      throw new HttpError(400, "Informe ao menos um pedido antes de enviar para aprovação.");
-    }
-  } else if (creditos.length === 0) {
-    throw new HttpError(400, "Informe ao menos uma linha de créditos antes de enviar para aprovação.");
+  const temDespesa = investimentos.length > 0;
+  const temRecebimento = temPedido ? pedidos.length > 0 : creditos.length > 0;
+  if (!temDespesa && !temRecebimento) {
+    throw new HttpError(
+      400,
+      temPedido
+        ? "Informe ao menos uma despesa ou um pedido antes de enviar para aprovação."
+        : "Informe ao menos uma despesa ou um crédito antes de enviar para aprovação."
+    );
   }
 }
 

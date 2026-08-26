@@ -14,6 +14,7 @@ export const STORES = {
   counters: "counters",
   arquivos: "arquivos",
   logs: "logs",
+  backups: "backups",
 } as const;
 
 export type StoreName = (typeof STORES)[keyof typeof STORES];

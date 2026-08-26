@@ -66,6 +66,7 @@ function podeVerTudo(user: SessionUser): boolean {
 function validarRascunho(input: MissaoInput) {
   if (!input.nome?.trim()) throw new HttpError(400, "Nome da Missão é obrigatório.");
   if (!input.data) throw new HttpError(400, "Data da Missão é obrigatória.");
+  if (input.data < hojeISO()) throw new HttpError(400, "A Data da Missão não pode ser anterior a hoje.");
   if (!input.campoId) throw new HttpError(400, "Campo da missão é obrigatório.");
   if (!input.resumo?.trim()) throw new HttpError(400, "Resumo da Missão é obrigatório.");
   if (!input.objetivos?.trim()) throw new HttpError(400, "Objetivos da missão são obrigatórios.");
@@ -262,8 +263,16 @@ export default async (req: Request): Promise<Response> => {
       if (input.action === "marcarComprado") {
         requirePerfil(user, ["Administrador", "Coordenador", "Financeiro"]);
         if (!input.itemCompraId) throw new HttpError(400, "itemCompraId é obrigatório.");
-        if (!["Aprovada", "Aguardando Avaliação", "Finalizada"].includes(existing.status)) {
-          throw new HttpError(400, "Só é possível marcar itens comprados em missões já aprovadas.");
+        // Janela de marcação: da aprovação até (sem incluir) Finalizada — uma
+        // vez que a missão é Finalizada, os itens de compra ficam travados
+        // (nem editar, nem marcar/desmarcar).
+        if (!["Aprovada", "Aguardando Avaliação"].includes(existing.status)) {
+          throw new HttpError(
+            400,
+            existing.status === "Finalizada"
+              ? "Missão Finalizada — os itens de compra não podem mais ser alterados."
+              : "Só é possível marcar itens comprados em missões já aprovadas."
+          );
         }
         const itensCompra = existing.itensCompra.map((i) =>
           i.id === input.itemCompraId ? { ...i, comprado: !!input.comprado } : i
@@ -364,8 +373,10 @@ export default async (req: Request): Promise<Response> => {
       if (!id) throw new HttpError(400, "id é obrigatório.");
       const existing = await getById<Missao>(STORES.missoes, id);
       if (!existing) throw new HttpError(404, "Missão não encontrada.");
+      // Colaborador só pode excluir o próprio rascunho; Administrador e
+      // Coordenador podem excluir qualquer rascunho, de qualquer autor.
       const isOwner = existing.criadoPorId === user.colaboradorId;
-      requirePerfil(user, isOwner ? user.perfis : ["Administrador"]);
+      requirePerfil(user, isOwner ? user.perfis : ["Administrador", "Coordenador"]);
       if (existing.status !== "Rascunho") {
         throw new HttpError(400, "Só é possível excluir missões em Rascunho.");
       }

@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import { json, readJson, handleErrors, HttpError } from "./_lib/http";
 import { requireUser, requirePerfil } from "./_lib/session";
 import { listAll, getById, upsert, remove, STORES } from "./_lib/store";
-import type { Colaborador, Perfil } from "../../shared/types";
+import type { Colaborador, Perfil, SessionUser } from "../../shared/types";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PERFIS_VALIDOS: Perfil[] = ["Administrador", "Colaborador", "Financeiro", "Coordenador"];
@@ -25,6 +25,15 @@ function validar(input: Partial<Colaborador>) {
   }
   if (input.status !== "Ativo" && input.status !== "Não Ativo") {
     throw new HttpError(400, "Status é obrigatório (Ativo ou Não Ativo).");
+  }
+}
+
+// Hoje só o Administrador chega até aqui de qualquer forma (o escrever inteiro
+// já é Administrador-only, ver requirePerfil abaixo), mas deixamos explícito
+// pra regra valer por si só, mesmo se o acesso à tela for ampliado no futuro.
+function validarPerfilAdministrador(input: Partial<Colaborador>, user: SessionUser) {
+  if (input.perfis?.includes("Administrador") && !user.perfis.includes("Administrador")) {
+    throw new HttpError(403, "Só o Administrador pode atribuir o perfil Administrador a um colaborador.");
   }
 }
 
@@ -54,6 +63,7 @@ export default async (req: Request): Promise<Response> => {
     if (req.method === "POST") {
       const input = await readJson<Partial<Colaborador>>(req);
       validar(input);
+      validarPerfilAdministrador(input, user);
       const email = input.email!.toLowerCase().trim();
       const existentes = await listAll<Colaborador>(STORES.colaboradores);
       if (existentes.some((c) => c.email.toLowerCase() === email)) {
@@ -80,6 +90,7 @@ export default async (req: Request): Promise<Response> => {
       const existing = await getById<Colaborador>(STORES.colaboradores, input.id);
       if (!existing) throw new HttpError(404, "Colaborador não encontrado.");
       validar(input);
+      validarPerfilAdministrador(input, user);
       const email = input.email!.toLowerCase().trim();
       const outros = (await listAll<Colaborador>(STORES.colaboradores)).filter((c) => c.id !== input.id);
       if (outros.some((c) => c.email.toLowerCase() === email)) {

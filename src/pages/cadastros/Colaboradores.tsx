@@ -3,6 +3,7 @@ import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
 import { api, ApiError } from "../../lib/api";
 import { useActionNotice } from "../../lib/ActionNoticeContext";
+import { useAuth } from "../../lib/AuthContext";
 import { PERFIS } from "../../../shared/types";
 import type { Colaborador, Perfil } from "../../../shared/types";
 
@@ -16,6 +17,8 @@ const EMPTY = {
 
 export default function Colaboradores() {
   const { notify } = useActionNotice();
+  const { has } = useAuth();
+  const podeAtribuirAdministrador = has("Administrador");
   const [lista, setLista] = useState<Colaborador[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,12 +143,20 @@ export default function Colaboradores() {
             </Field>
             <Field label="Perfil" required hint="Pode selecionar mais de um perfil por usuário.">
               <div className="checkbox-group">
-                {PERFIS.map((p) => (
-                  <label className="checkbox-row" key={p}>
-                    <input type="checkbox" checked={form.perfis.includes(p)} onChange={() => togglePerfil(p)} />
-                    {p}
-                  </label>
-                ))}
+                {PERFIS.map((p) => {
+                  const bloqueado = p === "Administrador" && !podeAtribuirAdministrador;
+                  return (
+                    <label className="checkbox-row" key={p} title={bloqueado ? "Só o Administrador pode atribuir este perfil." : undefined}>
+                      <input
+                        type="checkbox"
+                        checked={form.perfis.includes(p)}
+                        disabled={bloqueado}
+                        onChange={() => togglePerfil(p)}
+                      />
+                      {p}
+                    </label>
+                  );
+                })}
               </div>
             </Field>
             <Field label="Status" required>

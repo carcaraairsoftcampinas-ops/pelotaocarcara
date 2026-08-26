@@ -1,7 +1,10 @@
 import React, { createContext, useCallback, useContext, useState } from "react";
 
 interface ActionNoticeState {
-  notify: (message: string) => void;
+  // onClose (opcional) roda depois que o usuário clica OK — usado quando uma
+  // ação de sucesso precisa disparar algo só depois que o aviso foi visto
+  // (ex: voltar pra tela em branco depois de "Enviar para Análise").
+  notify: (message: string, onClose?: () => void) => void;
 }
 
 const ActionNoticeContext = createContext<ActionNoticeState | null>(null);
@@ -10,19 +13,25 @@ const ActionNoticeContext = createContext<ActionNoticeState | null>(null);
 // excluir, etc.) é concluída com sucesso — o usuário só segue depois de
 // clicar OK, então nenhuma confirmação passa despercebida.
 export function ActionNoticeProvider({ children }: { children: React.ReactNode }) {
-  const [message, setMessage] = useState<string | null>(null);
+  const [state, setState] = useState<{ message: string; onClose?: () => void } | null>(null);
 
-  const notify = useCallback((msg: string) => setMessage(msg), []);
+  const notify = useCallback((msg: string, onClose?: () => void) => setState({ message: msg, onClose }), []);
+
+  function fechar() {
+    const cb = state?.onClose;
+    setState(null);
+    cb?.();
+  }
 
   return (
     <ActionNoticeContext.Provider value={{ notify }}>
       {children}
-      {message && (
+      {state && (
         <div className="modal-overlay" role="alertdialog" aria-modal="true">
           <div className="modal-box">
-            <p>{message}</p>
+            <p>{state.message}</p>
             <div className="btn-row" style={{ justifyContent: "flex-end" }}>
-              <button className="btn btn-primary" autoFocus onClick={() => setMessage(null)}>
+              <button className="btn btn-primary" autoFocus onClick={fechar}>
                 OK
               </button>
             </div>

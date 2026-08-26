@@ -129,10 +129,34 @@ export default function NovaMissao() {
 
   const totalCompra = totalItensCompra(itensCompra);
 
+  function limparFormulario() {
+    setNumero(null);
+    setStatus("Rascunho");
+    setNome("");
+    setTipo("Evento");
+    setData(hojeISO());
+    setCampoId("");
+    setResumo("");
+    setObjetivos("");
+    setQuantidadeOperadores("");
+    setItensNecessarios([]);
+    setNovoItemNome("");
+    setNovoItemQtd("1");
+    setItensCompra([]);
+    setCartasExistentes([]);
+    setImagensExistentes([]);
+    setNovasCartas([]);
+    setNovasImagens([]);
+    setRemoverCartas([]);
+    setRemoverImagens([]);
+    setError(null);
+  }
+
   function camposFaltando(): string[] {
     const faltando: string[] = [];
     if (!nome.trim()) faltando.push("Nome da Missão");
     if (!data) faltando.push("Data da Missão");
+    else if (data < hojeISO()) faltando.push("Data da Missão (não pode ser anterior a hoje)");
     if (!campoId) faltando.push("Campo da missão");
     if (!resumo.trim()) faltando.push("Resumo Missão");
     if (!objetivos.trim()) faltando.push("Objetivos da missão");
@@ -145,6 +169,10 @@ export default function NovaMissao() {
   }
 
   async function salvar(action: "save" | "submit") {
+    if (data && data < hojeISO()) {
+      notify("A Data da Missão não pode ser anterior a hoje. Corrija a data antes de salvar.");
+      return;
+    }
     if (action === "submit") {
       const faltando = camposFaltando();
       if (faltando.length > 0) {
@@ -179,12 +207,18 @@ export default function NovaMissao() {
         saved = await api.post<Missao>("/missoes", payload);
       }
 
-      notify(
-        action === "submit"
-          ? `Missão enviada para análise com sucesso (nº ${saved.numero}).`
-          : "Rascunho salvo com sucesso."
-      );
-      navigate(`/missoes/nova/${saved.id}`, { replace: true });
+      if (action === "submit") {
+        // Depois que o usuário fecha o aviso, volta pra uma Nova Missão em
+        // branco (em vez de continuar na missão recém-enviada), já pronta
+        // pra preencher a próxima.
+        notify(`Missão enviada para análise com sucesso (nº ${saved.numero}).`, () => {
+          limparFormulario();
+          navigate("/missoes/nova", { replace: true });
+        });
+      } else {
+        notify("Rascunho salvo com sucesso.");
+        navigate(`/missoes/nova/${saved.id}`, { replace: true });
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao salvar missão.");
     } finally {
@@ -231,8 +265,12 @@ export default function NovaMissao() {
             </Field>
           </div>
           <div className="grid grid-2">
-            <Field label="Data da Missão" required hint="Não pode coincidir com outra missão já Aprovada.">
-              <input type="date" value={data} onChange={(e) => setData(e.target.value)} required />
+            <Field
+              label="Data da Missão"
+              required
+              hint="Não pode ser anterior a hoje, nem coincidir com outra missão já Aprovada."
+            >
+              <input type="date" value={data} min={hojeISO()} onChange={(e) => setData(e.target.value)} required />
             </Field>
             <Field label="Campo da missão" required hint="Só aparecem campos Ativos (Cadastros → Campos).">
               <select value={campoId} onChange={(e) => setCampoId(e.target.value)} required>

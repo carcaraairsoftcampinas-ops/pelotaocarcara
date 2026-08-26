@@ -22,6 +22,7 @@ export const MENU: MenuGroup[] = [
       { label: "Operadores", path: "/cadastros/operadores" },
       { label: "Produtos", path: "/cadastros/produtos" },
       { label: "Reset do Sistema", path: "/cadastros/reset" },
+      { label: "Backup", path: "/cadastros/backup" },
     ],
   },
   {

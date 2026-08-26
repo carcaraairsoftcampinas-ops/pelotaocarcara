@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../components/Layout";
 import { Field, Banner } from "../components/Field";
+import { SortableTh } from "../components/SortableTh";
+import { useSort } from "../lib/useSort";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/AuthContext";
 import { useActionNotice } from "../lib/ActionNoticeContext";
 import { formatDate } from "../../shared/calc";
 import type { LogEntry } from "../../shared/types";
+
+type SortField = "data" | "tipo" | "referencia" | "acao" | "detalhes" | "responsavel";
 
 const EMPTY_FILTROS = {
   entidadeTipo: "" as "" | "missao" | "financeiro",
@@ -36,6 +40,7 @@ export default function Logs() {
   const [editando, setEditando] = useState<LogEntry | null>(null);
   const [detalhesEdit, setDetalhesEdit] = useState("");
   const [saving, setSaving] = useState(false);
+  const { sort, toggleSort, ordenar } = useSort<SortField>();
 
   async function load() {
     setLoading(true);
@@ -65,6 +70,25 @@ export default function Logs() {
       .filter((l) => (f.dataFim ? l.data.slice(0, 10) <= f.dataFim : true))
       .filter((l) => (f.busca ? l.entidadeNome.toLowerCase().includes(f.busca.toLowerCase()) : true));
   }, [lista, filtrosAplicados]);
+
+  function valorOrdenavel(l: LogEntry, field: SortField): string | number {
+    switch (field) {
+      case "data":
+        return l.data;
+      case "tipo":
+        return l.entidadeTipo;
+      case "referencia":
+        return l.entidadeNome;
+      case "acao":
+        return l.acao;
+      case "detalhes":
+        return l.detalhes || "";
+      case "responsavel":
+        return l.colaboradorNome;
+    }
+  }
+
+  const listaOrdenada = useMemo(() => ordenar(listaFiltrada, valorOrdenavel), [listaFiltrada, sort]);
 
   function abrirEdicao(l: LogEntry) {
     setEditando(l);
@@ -135,17 +159,17 @@ export default function Logs() {
             <table>
               <thead>
                 <tr>
-                  <th>Data/Hora</th>
-                  <th>Tipo</th>
-                  <th>Referência</th>
-                  <th>Ação</th>
-                  <th>Detalhes</th>
-                  <th>Responsável</th>
+                  <SortableTh field="data" sort={sort} onSort={toggleSort}>Data/Hora</SortableTh>
+                  <SortableTh field="tipo" sort={sort} onSort={toggleSort}>Tipo</SortableTh>
+                  <SortableTh field="referencia" sort={sort} onSort={toggleSort}>Referência</SortableTh>
+                  <SortableTh field="acao" sort={sort} onSort={toggleSort}>Ação</SortableTh>
+                  <SortableTh field="detalhes" sort={sort} onSort={toggleSort}>Detalhes</SortableTh>
+                  <SortableTh field="responsavel" sort={sort} onSort={toggleSort}>Responsável</SortableTh>
                   {podeEditar && <th></th>}
                 </tr>
               </thead>
               <tbody>
-                {listaFiltrada.map((l) => (
+                {listaOrdenada.map((l) => (
                   <tr key={l.id}>
                     <td>{formatDataHora(l.data)}</td>
                     <td>{l.entidadeTipo === "missao" ? "Missão" : "Financeiro"}</td>

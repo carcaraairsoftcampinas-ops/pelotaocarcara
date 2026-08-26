@@ -60,6 +60,10 @@ export function arquivoUrl(key: string): string {
   return `${BASE}/arquivo?key=${encodeURIComponent(key)}`;
 }
 
+export function backupDownloadUrl(id: string): string {
+  return `${BASE}/backup?id=${encodeURIComponent(id)}`;
+}
+
 // Envia UM arquivo por vez pro servidor (evita payload grande demais quando
 // há vários anexos) e devolve a referência (blobKey) pra guardar no registro.
 export async function uploadArquivo(file: File): Promise<{ blobKey: string; nomeArquivo: string }> {

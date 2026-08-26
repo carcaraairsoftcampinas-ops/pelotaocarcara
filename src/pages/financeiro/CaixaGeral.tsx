@@ -2,9 +2,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../../components/Layout";
 import { Banner, Field } from "../../components/Field";
 import { StatusFinanceiroBadge } from "../../components/StatusBadge";
+import { SortableTh } from "../../components/SortableTh";
+import { useSort } from "../../lib/useSort";
 import { api, ApiError } from "../../lib/api";
 import { buildMovimentacaoRows } from "../../lib/financeiroRows";
 import type { MovimentacaoRow } from "../../lib/financeiroRows";
+
+type AprovadoSortField = "origem" | "nome" | "aprovadoEm" | "recebido" | "gasto" | "resultado";
+type ProvisaoSortField = "status" | "origem" | "nome" | "data" | "colaborador";
 import {
   totalInvestimentos,
   totalRecebidoLancamento,
@@ -76,6 +81,8 @@ export default function CaixaGeral() {
   const [filtrosCaixaAplicados, setFiltrosCaixaAplicados] = useState(EMPTY_FILTROS_CAIXA);
   const [filtrosProvisao, setFiltrosProvisao] = useState(EMPTY_FILTROS_PROVISAO);
   const [filtrosProvisaoAplicados, setFiltrosProvisaoAplicados] = useState(EMPTY_FILTROS_PROVISAO);
+  const { sort: aprovadoSort, toggleSort: toggleAprovadoSort, ordenar: ordenarAprovados } = useSort<AprovadoSortField>();
+  const { sort: provisaoSort, toggleSort: toggleProvisaoSort, ordenar: ordenarProvisao } = useSort<ProvisaoSortField>();
 
   useEffect(() => {
     (async () => {
@@ -116,6 +123,40 @@ export default function CaixaGeral() {
     setFiltrosProvisaoAplicados(filtrosProvisao);
   }
 
+  function valorOrdenavelAprovado(l: LancamentoFinanceiro, field: AprovadoSortField): string | number {
+    switch (field) {
+      case "origem":
+        return l.tipo;
+      case "nome":
+        return titulo(l);
+      case "aprovadoEm":
+        return dataAprovacao(l);
+      case "recebido":
+        return totalRecebidoLancamento(l);
+      case "gasto":
+        return totalInvestimentos(l.investimentos);
+      case "resultado":
+        return resultadoLancamento(l);
+    }
+  }
+
+  function valorOrdenavelProvisao(r: MovimentacaoRow, field: ProvisaoSortField): string | number {
+    switch (field) {
+      case "status":
+        return r.status;
+      case "origem":
+        return r.origem;
+      case "nome":
+        return r.nome;
+      case "data":
+        return r.data;
+      case "colaborador":
+        return r.colaboradorNome;
+    }
+  }
+
+  const aprovadosOrdenados = useMemo(() => ordenarAprovados(aprovados, valorOrdenavelAprovado), [aprovados, aprovadoSort]);
+
   // Total Recebido/Gasto "de verdade" — soma TODOS os lançamentos (não só o
   // filtro de auditoria abaixo): Financeiro Aprovado conta por inteiro, e
   // Em Andamento conta só os itens já marcados "Recebido" individualmente
@@ -148,6 +189,11 @@ export default function CaixaGeral() {
       .filter((r) => (f.dataFim ? r.data <= f.dataFim : true))
       .filter((r) => (f.numero ? numeroMissaoDaLinha(r).toLowerCase().includes(f.numero.toLowerCase()) : true));
   }, [linhasProvisaoTodas, filtrosProvisaoAplicados, numeroMissaoDaLinha]);
+
+  const linhasProvisaoOrdenadas = useMemo(
+    () => ordenarProvisao(linhasProvisao, valorOrdenavelProvisao),
+    [linhasProvisao, provisaoSort]
+  );
 
   const provisaoGasto = linhasProvisao.reduce((sum, r) => {
     if (r.lancamentoId) {
@@ -275,16 +321,16 @@ export default function CaixaGeral() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Origem</th>
-                      <th>Nome</th>
-                      <th>Aprovado em</th>
-                      <th>Recebido</th>
-                      <th>Gasto</th>
-                      <th>Resultado</th>
+                      <SortableTh field="origem" sort={aprovadoSort} onSort={toggleAprovadoSort}>Origem</SortableTh>
+                      <SortableTh field="nome" sort={aprovadoSort} onSort={toggleAprovadoSort}>Nome</SortableTh>
+                      <SortableTh field="aprovadoEm" sort={aprovadoSort} onSort={toggleAprovadoSort}>Aprovado em</SortableTh>
+                      <SortableTh field="recebido" sort={aprovadoSort} onSort={toggleAprovadoSort}>Recebido</SortableTh>
+                      <SortableTh field="gasto" sort={aprovadoSort} onSort={toggleAprovadoSort}>Gasto</SortableTh>
+                      <SortableTh field="resultado" sort={aprovadoSort} onSort={toggleAprovadoSort}>Resultado</SortableTh>
                     </tr>
                   </thead>
                   <tbody>
-                    {aprovados.map((l) => (
+                    {aprovadosOrdenados.map((l) => (
                       <tr key={l.id} style={{ cursor: "pointer" }} onClick={() => abrirDetalheLancamento(l)}>
                         <td>{l.tipo === "missao" ? "Missão" : "Projeto"}</td>
                         <td>{titulo(l)}</td>
@@ -361,15 +407,15 @@ export default function CaixaGeral() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Status</th>
-                      <th>Origem</th>
-                      <th>Nome</th>
-                      <th>Data</th>
-                      <th>Colaborador</th>
+                      <SortableTh field="status" sort={provisaoSort} onSort={toggleProvisaoSort}>Status</SortableTh>
+                      <SortableTh field="origem" sort={provisaoSort} onSort={toggleProvisaoSort}>Origem</SortableTh>
+                      <SortableTh field="nome" sort={provisaoSort} onSort={toggleProvisaoSort}>Nome</SortableTh>
+                      <SortableTh field="data" sort={provisaoSort} onSort={toggleProvisaoSort}>Data</SortableTh>
+                      <SortableTh field="colaborador" sort={provisaoSort} onSort={toggleProvisaoSort}>Colaborador</SortableTh>
                     </tr>
                   </thead>
                   <tbody>
-                    {linhasProvisao.map((r) => (
+                    {linhasProvisaoOrdenadas.map((r) => (
                       <tr key={r.key} style={{ cursor: "pointer" }} onClick={() => abrirDetalheRow(r)}>
                         <td>
                           <StatusFinanceiroBadge status={r.status} />

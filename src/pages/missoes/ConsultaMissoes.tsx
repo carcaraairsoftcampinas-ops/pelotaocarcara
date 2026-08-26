@@ -3,12 +3,26 @@ import { useNavigate } from "react-router-dom";
 import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
 import { StatusBadge } from "../../components/StatusBadge";
+import { SortableTh } from "../../components/SortableTh";
+import { useSort } from "../../lib/useSort";
 import { api, ApiError, arquivoUrl } from "../../lib/api";
 import { useAuth } from "../../lib/AuthContext";
 import { useActionNotice } from "../../lib/ActionNoticeContext";
 import { formatBRL, formatDate } from "../../../shared/calc";
 import { STATUS_MISSAO_ORDEM } from "../../../shared/types";
 import type { Campo, Colaborador, Missao } from "../../../shared/types";
+
+type SortField =
+  | "status"
+  | "numero"
+  | "nome"
+  | "data"
+  | "campo"
+  | "colaborador"
+  | "operadores"
+  | "dataEnvioAnalise"
+  | "analista"
+  | "avaliacao";
 
 export default function ConsultaMissoes() {
   const { has, user } = useAuth();
@@ -24,6 +38,7 @@ export default function ConsultaMissoes() {
   const [error, setError] = useState<string | null>(null);
   const [selecionada, setSelecionada] = useState<Missao | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  const { sort, toggleSort, ordenar } = useSort<SortField>();
 
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
@@ -83,6 +98,33 @@ export default function ConsultaMissoes() {
     const map = new Map(campos.map((c) => [c.id, c.nome]));
     return (id: string) => map.get(id) || "—";
   }, [campos]);
+
+  function valorOrdenavel(m: Missao, field: SortField): string | number {
+    switch (field) {
+      case "status":
+        return m.status;
+      case "numero":
+        return m.numero || "";
+      case "nome":
+        return m.nome;
+      case "data":
+        return m.data;
+      case "campo":
+        return campoNome(m.campoId);
+      case "colaborador":
+        return m.criadoPorNome;
+      case "operadores":
+        return m.quantidadeOperadores ?? -1;
+      case "dataEnvioAnalise":
+        return m.dataEnvioAnalise || "";
+      case "analista":
+        return m.analistaNome || "";
+      case "avaliacao":
+        return m.avaliacao?.estrelas ?? -1;
+    }
+  }
+
+  const missoesOrdenadas = ordenar(missoes, valorOrdenavel);
 
   return (
     <div>
@@ -155,18 +197,22 @@ export default function ConsultaMissoes() {
             <table>
               <thead>
                 <tr>
-                  <th>Status</th>
-                  <th>Número</th>
-                  <th>NOME DA MISSÃO</th>
-                  <th>Data Evento</th>
-                  <th>Campo</th>
-                  <th>Colaborador</th>
-                  <th>Qtde Operadores</th>
-                  {!somenteColaborador && <th>Avaliação</th>}
+                  <SortableTh field="status" sort={sort} onSort={toggleSort}>Status</SortableTh>
+                  <SortableTh field="numero" sort={sort} onSort={toggleSort}>Número</SortableTh>
+                  <SortableTh field="nome" sort={sort} onSort={toggleSort}>NOME DA MISSÃO</SortableTh>
+                  <SortableTh field="data" sort={sort} onSort={toggleSort}>Data Evento</SortableTh>
+                  <SortableTh field="dataEnvioAnalise" sort={sort} onSort={toggleSort}>Data Envio Análise</SortableTh>
+                  <SortableTh field="campo" sort={sort} onSort={toggleSort}>Campo</SortableTh>
+                  <SortableTh field="colaborador" sort={sort} onSort={toggleSort}>Colaborador</SortableTh>
+                  <SortableTh field="analista" sort={sort} onSort={toggleSort}>Analista</SortableTh>
+                  <SortableTh field="operadores" sort={sort} onSort={toggleSort}>Qtde Operadores</SortableTh>
+                  {!somenteColaborador && (
+                    <SortableTh field="avaliacao" sort={sort} onSort={toggleSort}>Avaliação</SortableTh>
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {missoes.map((m) => (
+                {missoesOrdenadas.map((m) => (
                   <tr key={m.id} style={{ cursor: "pointer" }} onClick={() => setSelecionada(m)}>
                     <td>
                       <StatusBadge status={m.status} />
@@ -174,8 +220,10 @@ export default function ConsultaMissoes() {
                     <td>{m.numero || "—"}</td>
                     <td>{m.nome}</td>
                     <td>{formatDate(m.data)}</td>
+                    <td>{m.dataEnvioAnalise ? formatDate(m.dataEnvioAnalise) : "—"}</td>
                     <td>{campoNome(m.campoId)}</td>
                     <td>{m.criadoPorNome}</td>
+                    <td>{m.analistaNome || "—"}</td>
                     <td>{m.quantidadeOperadores ?? "—"}</td>
                     {!somenteColaborador && <td>{m.avaliacao ? "★".repeat(m.avaliacao.estrelas) : "—"}</td>}
                   </tr>
@@ -321,7 +369,7 @@ export default function ConsultaMissoes() {
                 </button>
               )}
             {selecionada.status === "Rascunho" &&
-              (selecionada.criadoPorId === user?.colaboradorId || has("Administrador")) && (
+              (selecionada.criadoPorId === user?.colaboradorId || has("Administrador", "Coordenador")) && (
                 <button
                   className="btn btn-danger"
                   disabled={excluindo}

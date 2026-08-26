@@ -1,11 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../../components/Layout";
 import { Field, Banner } from "../../components/Field";
 import { StatusBadge } from "../../components/StatusBadge";
+import { SortableTh } from "../../components/SortableTh";
+import { useSort } from "../../lib/useSort";
 import { api, ApiError } from "../../lib/api";
 import { useActionNotice } from "../../lib/ActionNoticeContext";
 import { formatDate } from "../../../shared/calc";
 import type { Campo, Missao } from "../../../shared/types";
+
+type SortField = "status" | "numero" | "nome" | "data" | "dataEnvioAnalise" | "campo" | "operadores" | "avaliacao" | "avaliadoPor";
 
 function StarPicker({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
@@ -30,6 +34,7 @@ export default function AvaliacaoMissoes() {
   const [comentario, setComentario] = useState("");
   const [totalOperadoresPresentes, setTotalOperadoresPresentes] = useState("");
   const [saving, setSaving] = useState(false);
+  const { sort, toggleSort, ordenar } = useSort<SortField>();
 
   async function load() {
     setLoading(true);
@@ -57,14 +62,18 @@ export default function AvaliacaoMissoes() {
     setError(null);
   }
 
+  function camposFaltando(): string[] {
+    const faltando: string[] = [];
+    if (estrelas < 1) faltando.push("Avaliação (1 a 5 estrelas)");
+    if (!totalOperadoresPresentes || Number(totalOperadoresPresentes) < 1) faltando.push("Qtde Operadores Presentes");
+    return faltando;
+  }
+
   async function avaliar() {
     if (!selecionada) return;
-    if (estrelas < 1) {
-      setError("Selecione de 1 a 5 estrelas.");
-      return;
-    }
-    if (!totalOperadoresPresentes || Number(totalOperadoresPresentes) < 1) {
-      setError("Informe o total de operadores presentes.");
+    const faltando = camposFaltando();
+    if (faltando.length > 0) {
+      notify(`Preencha os campos obrigatórios antes de avaliar:\n\n${faltando.map((f) => `• ${f}`).join("\n")}`);
       return;
     }
     setSaving(true);
@@ -89,6 +98,31 @@ export default function AvaliacaoMissoes() {
 
   const campoNome = (id: string) => campos.find((c) => c.id === id)?.nome || "—";
 
+  function valorOrdenavel(m: Missao, field: SortField): string | number {
+    switch (field) {
+      case "status":
+        return m.status;
+      case "numero":
+        return m.numero || "";
+      case "nome":
+        return m.nome;
+      case "data":
+        return m.data;
+      case "dataEnvioAnalise":
+        return m.dataEnvioAnalise || "";
+      case "campo":
+        return campoNome(m.campoId);
+      case "operadores":
+        return m.quantidadeOperadores ?? -1;
+      case "avaliacao":
+        return m.avaliacao?.estrelas ?? -1;
+      case "avaliadoPor":
+        return m.avaliacao?.avaliadoPor || "";
+    }
+  }
+
+  const missoesOrdenadas = useMemo(() => ordenar(missoes, valorOrdenavel), [missoes, sort]);
+
   return (
     <div>
       <PageHeader crumbs="Análise de Missões" title="Avaliação de Missões" />
@@ -104,18 +138,19 @@ export default function AvaliacaoMissoes() {
             <table>
               <thead>
                 <tr>
-                  <th>Status</th>
-                  <th>Número</th>
-                  <th>Nome</th>
-                  <th>Data</th>
-                  <th>Data de criação</th>
-                  <th>Campo</th>
-                  <th>Qtde Operadores</th>
-                  <th>Avaliação</th>
+                  <SortableTh field="status" sort={sort} onSort={toggleSort}>Status</SortableTh>
+                  <SortableTh field="numero" sort={sort} onSort={toggleSort}>Número</SortableTh>
+                  <SortableTh field="nome" sort={sort} onSort={toggleSort}>Nome</SortableTh>
+                  <SortableTh field="data" sort={sort} onSort={toggleSort}>Data</SortableTh>
+                  <SortableTh field="dataEnvioAnalise" sort={sort} onSort={toggleSort}>Data Envio Análise</SortableTh>
+                  <SortableTh field="campo" sort={sort} onSort={toggleSort}>Campo</SortableTh>
+                  <SortableTh field="operadores" sort={sort} onSort={toggleSort}>Qtde Operadores</SortableTh>
+                  <SortableTh field="avaliacao" sort={sort} onSort={toggleSort}>Avaliação</SortableTh>
+                  <SortableTh field="avaliadoPor" sort={sort} onSort={toggleSort}>Avaliado por</SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {missoes.map((m) => (
+                {missoesOrdenadas.map((m) => (
                   <tr key={m.id} style={{ cursor: "pointer" }} onClick={() => abrir(m)}>
                     <td>
                       <StatusBadge status={m.status} />
@@ -127,6 +162,7 @@ export default function AvaliacaoMissoes() {
                     <td>{campoNome(m.campoId)}</td>
                     <td>{m.quantidadeOperadores ?? "—"}</td>
                     <td>{m.avaliacao ? "★".repeat(m.avaliacao.estrelas) : "Pendente"}</td>
+                    <td>{m.avaliacao?.avaliadoPor || "—"}</td>
                   </tr>
                 ))}
               </tbody>

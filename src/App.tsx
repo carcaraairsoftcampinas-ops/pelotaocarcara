@@ -11,6 +11,7 @@ import Campos from "./pages/cadastros/Campos";
 import Operadores from "./pages/cadastros/Operadores";
 import Produtos from "./pages/cadastros/Produtos";
 import ResetSistema from "./pages/cadastros/ResetSistema";
+import Backup from "./pages/cadastros/Backup";
 import NovaMissao from "./pages/missoes/NovaMissao";
 import ConsultaMissoes from "./pages/missoes/ConsultaMissoes";
 import CamposDisponiveis from "./pages/missoes/CamposDisponiveis";
@@ -70,6 +71,10 @@ export default function App() {
       <Route
         path="/cadastros/reset"
         element={<Protected perfis={["Administrador"]}>{<ResetSistema />}</Protected>}
+      />
+      <Route
+        path="/cadastros/backup"
+        element={<Protected perfis={["Administrador"]}>{<Backup />}</Protected>}
       />
 
       <Route
