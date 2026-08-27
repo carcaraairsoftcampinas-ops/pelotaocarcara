@@ -1,5 +1,5 @@
 import { json, handleErrors } from "./_lib/http";
-import { getUserFromRequest, buildClearCookie } from "./_lib/session";
+import { getUserFromRequest, buildClearCookie, buildSessionCookie, signSession } from "./_lib/session";
 import { getById, STORES } from "./_lib/store";
 import type { Colaborador, SessionUser } from "../../shared/types";
 
@@ -22,6 +22,15 @@ export default async (req: Request): Promise<Response> => {
       perfis: colaborador.perfis,
       colaboradorId: colaborador.id,
     };
-    return json(200, { user: fresh });
+
+    // Reemite o cookie de sessão com os dados atualizados. Sem isso, o
+    // cookie (usado por TODAS as funções de escrita via requireUser/
+    // requirePerfil) ficava travado nos perfis de quando o login foi feito
+    // — até 7 dias — mesmo com a tela já mostrando os perfis novos aqui.
+    // Resultado: um Administrador promovido depois do login via a tela de
+    // Cadastros liberada, mas tomava "Você não tem permissão" ao tentar
+    // salvar, porque o backend decodificava o cookie antigo.
+    const token = signSession(fresh);
+    return json(200, { user: fresh }, { "set-cookie": buildSessionCookie(token) });
   });
 };
